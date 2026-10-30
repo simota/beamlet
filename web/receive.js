@@ -58,6 +58,62 @@ function showFiles(status) {
   }
 }
 
+// The headline above the viewfinder: what is happening, what to do about
+// it, and how far the whole transfer has got. Kept across stop/resume, as
+// the session and its received data are.
+let tiles = 0, everSynced = false, overall = 0;
+// After this long without ever finding the sender, the hint gets specific.
+const SEARCH_PATIENCE_MS = 6000;
+
+function setPhase(label, hint, pct) {
+  if ($('phase-label').textContent !== label) $('phase-label').textContent = label;
+  if ($('phase-hint').textContent !== hint) $('phase-hint').textContent = hint;
+  const meter = $('meter');
+  if (pct === null) {
+    meter.dataset.indeterminate = '';
+    meter.removeAttribute('aria-valuenow');
+  } else {
+    delete meter.dataset.indeterminate;
+    meter.style.setProperty('--p', pct);
+    meter.setAttribute('aria-valuenow', pct);
+  }
+}
+
+/// Size-weighted share of all files received, failed files left out.
+function progress(files) {
+  let total = 0, got = 0;
+  for (const f of files) {
+    if (f.state === 'failed') continue;
+    const w = Math.max(1, f.size);
+    total += w;
+    got += f.state === 'done' ? w : f.needed ? (w * Math.min(f.received, f.needed)) / f.needed : 0;
+  }
+  return total ? Math.min(99, Math.floor((100 * got) / total)) : 0;
+}
+
+function showPhase(r, elapsed) {
+  if (r.status.files) overall = progress(r.status.files);
+  if (r.status.complete) {
+    setPhase('すべて受信しました', '下の一覧から各ファイルを保存してください。', 100);
+  } else if (r.synced && r.status.files) {
+    setPhase(`受信中 ${overall}%`, 'このまま送信側の画面を映し続けてください。', overall);
+  } else if (r.synced) {
+    setPhase('受信中 — ファイル一覧を待っています', `データを受け取っています（${tiles} タイル）。このまま映し続けてください。`, null);
+  } else if (r.detected) {
+    setPhase('別の送信の画面が映っています', '送信側でこの画面の QR コードを読み直し、確認番号が一致することを確かめてください。', overall);
+  } else if (everSynced) {
+    setPhase('送信側の画面を見失いました', '送信側の画面全体（4 隅のマーカー）が枠に収まるように戻してください。受信済みのデータは残っています。', overall);
+  } else {
+    setPhase(
+      '送信側の画面を探しています',
+      elapsed > SEARCH_PATIENCE_MS
+        ? 'まだ見つかりません。送信側の画面全体が映る距離に調整し、送信側の画面を明るくするか、送信側で表示を小さくしてください。'
+        : '送信側の画面全体（4 隅のマーカー）がカメラに映るようにしてください。',
+      0,
+    );
+  }
+}
+
 // Captures are scaled so their long side is at most this many pixels: a
 // camera that delivers 4K would otherwise quadruple every frame's copies.
 const MAX_CAPTURE = 1920;
@@ -84,20 +140,23 @@ async function startCamera() {
       const meta = r.status.files.find((x) => x.oid === f.oid);
       links.set(f.oid, URL.createObjectURL(new Blob([f.data], { type: meta.mime })));
     }
-    const rate = (decoded * 1000) / (performance.now() - started);
+    const now = performance.now();
+    const rate = (decoded * 1000) / (now - started);
     showFiles(r.status);
     // A frame already in the worker can answer after the user stopped; it
     // still delivers data, but must not overwrite the stopped status.
     if (!running && !r.status.complete) return;
+    if (r.synced) {
+      tiles += r.ok;
+      everSynced = true;
+    }
     $('step-receive').dataset.state = r.status.complete ? 'done' : r.synced ? 'synced' : r.detected ? 'foreign' : 'searching';
+    showPhase(r, now - started);
     $('status').textContent = r.synced
-      ? `受信中 — ${r.ok}/${r.total} タイル、解析 ${r.ms.toFixed(0)} ms${r.tracked ? '（追跡）' : ''}、${rate.toFixed(1)} fps`
-      : r.detected
-        ? '画面は見えていますが、このセッションのものではありません'
-        : `送信側の画面の 4 隅のマーカーがすべて映るようにしてください（入り切らなければ離れるか、送信側で表示を小さく）— カメラ ${canvas.width}×${canvas.height}`;
+      ? `${r.ok}/${r.total} タイル、解析 ${r.ms.toFixed(0)} ms${r.tracked ? '（追跡）' : ''}、${rate.toFixed(1)} fps`
+      : `カメラ ${canvas.width}×${canvas.height}、${rate.toFixed(1)} fps`;
     if (r.status.complete) {
       stop?.();
-      $('status').textContent = 'すべて受信しました。保存リンクから各ファイルを保存してください。';
       $('stop').hidden = true;
       $('again').hidden = false;
       $('again').focus();
@@ -160,7 +219,8 @@ $('stop').onclick = () => {
   if (stop) {
     stop();
     $('step-receive').dataset.state = 'stopped';
-    $('status').textContent = '停止しました。受信済みのデータは残っています。';
+    setPhase('停止しました', '「受信を再開する」で続きから受信できます。受信済みのデータは残っています。', overall);
+    $('status').textContent = '';
     $('stop').textContent = '受信を再開する';
   } else {
     start();

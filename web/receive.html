@@ -22,6 +22,11 @@
     <p id="key-status" class="status error" aria-live="polite"></p>
   </section>
   <section id="step-receive" hidden data-state="searching">
+    <div class="phase">
+      <p id="phase-label" class="phase-label">送信側の画面を探しています</p>
+      <div id="meter" class="meter" role="progressbar" aria-labelledby="phase-label" aria-valuemin="0" aria-valuemax="100"><span></span></div>
+      <p id="phase-hint" class="phase-hint"></p>
+    </div>
     <div class="viewfinder"><video id="video" playsinline muted></video></div>
     <p class="fingerprint">確認番号 <strong id="fingerprint-rx"></strong></p>
     <p id="status" class="status">送信側の画面を探しています…</p>
