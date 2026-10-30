@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["beamlet-stream"]
+members = ["beamlet-stream", "beamlet-stream/wasm"]
 
 # Detection and simulation run per-pixel loops over full 1080p frames;
 # unoptimised builds make tests and the lab tool take minutes.
