@@ -1,0 +1,10 @@
+[package]
+name = "bos-lab"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Offline measurement harness for the BOS1 optical stream format (docs/STREAM_FORMAT.md)"
+
+[dependencies]
+beamlet-stream = { path = "../../beamlet-stream" }
+png = "0.17"

@@ -1,0 +1,66 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>bos-lab player</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #fff; overflow: hidden; }
+  canvas { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); image-rendering: pixelated; }
+  #hud { position: fixed; left: 4px; bottom: 2px; font: 11px monospace; color: #999; }
+</style>
+<canvas id="c"></canvas>
+<div id="hud">loading…</div>
+<script>
+const W = __W__, H = __H__, Q = __Q__, FRAMES = __FRAMES__;
+const FPS = Number(new URLSearchParams(location.search).get('fps')) || __FPS__;
+const canvas = document.getElementById('c'), ctx = canvas.getContext('2d'), hud = document.getElementById('hud');
+
+const images = [];
+let loaded = 0;
+for (let i = 0; i < FRAMES; i++) {
+  const img = new Image();
+  img.onload = () => { if (++loaded === FRAMES) hud.textContent = 'tap to start / stop'; };
+  img.src = `frames/f${String(i).padStart(5, '0')}.png`;
+  images.push(img);
+}
+
+// One cell = an integer number of physical pixels; anything else blurs
+// cell edges and creates moiré on the camera side.
+let scale = 1;
+function layout() {
+  const dpr = devicePixelRatio || 1, cw = W + 2 * Q, ch = H + 2 * Q;
+  scale = Math.max(1, Math.floor(Math.min(innerWidth * dpr / cw, innerHeight * dpr / ch)));
+  canvas.width = cw * scale;
+  canvas.height = ch * scale;
+  canvas.style.width = canvas.width / dpr + 'px';
+  canvas.style.height = canvas.height / dpr + 'px';
+  ctx.imageSmoothingEnabled = false;
+}
+layout();
+addEventListener('resize', layout);
+
+let running = false, start = 0, shown = -1, skipped = 0, wakeLock = null;
+function tick(now) {
+  if (!running) return;
+  const idx = Math.floor((now - start) * FPS / 1000);
+  if (idx !== shown) {
+    if (shown >= 0 && idx > shown + 1) skipped += idx - shown - 1;
+    shown = idx;
+    ctx.drawImage(images[idx % FRAMES], 0, 0, canvas.width, canvas.height);
+    hud.textContent = `${W}x${H} cell=${scale}px fps=${FPS} frame=${idx % FRAMES} skipped=${skipped}`;
+  }
+  requestAnimationFrame(tick);
+}
+
+document.body.addEventListener('click', async () => {
+  if (loaded < FRAMES) return;
+  running = !running;
+  if (running) {
+    try { await document.documentElement.requestFullscreen?.(); } catch {}
+    try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
+    start = performance.now(); shown = -1; skipped = 0;
+    requestAnimationFrame(tick);
+  } else {
+    wakeLock?.release();
+  }
+});
+</script>
