@@ -24,8 +24,20 @@ use crate::tile::{self, TilePacket};
 /// Largest object either side accepts (STREAM_FORMAT.md §3), plus container overhead.
 pub const MAX_OBJECT: u64 = 100 * 1024 * 1024 + 1024 * 1024;
 const MAX_MANIFEST: usize = 4 * 1024 * 1024;
-/// One tile in this many carries the manifest (§4.2).
+/// One tile in this many carries the manifest during its first
+/// MANIFEST_EARLY_PASSES passes, which a receiver watching from the start
+/// reads the file list from (§4.2).
 const MANIFEST_SHARE: usize = 10;
+const MANIFEST_EARLY_PASSES: usize = 2;
+/// After those passes the manifest keeps only what a receiver that starts
+/// late needs to read it within PREVIEW_SECS: its source symbols times
+/// PREVIEW_MARGIN, which covers a quarter of the frames lost and the few
+/// symbols RaptorQ needs beyond the source count. The rest of its tenth
+/// goes to the files.
+const PREVIEW_SECS: f64 = 5.0;
+const PREVIEW_MARGIN: f64 = 1.5;
+/// One tile's worth of `Sender::manifest_credit`.
+const MANIFEST_WHOLE: u64 = 1_000_000;
 /// Symbols sent per object per pass, relative to its source symbol count (§4.2).
 const PASS_OVERHEAD: f64 = 1.1;
 /// Frames each object's pass spans at least. A small file's pass would
@@ -97,6 +109,8 @@ struct ObjectStream {
     next_repair: Vec<u32>,
     turn: usize,
     per_pass: usize,
+    /// Packets handed out so far, source and repair.
+    sent: usize,
 }
 
 impl ObjectStream {
@@ -120,10 +134,11 @@ impl ObjectStream {
             .collect();
         let source: VecDeque<EncodingPacket> = blocks.iter().flat_map(|b| b.source_packets()).collect();
         let per_pass = ((source.len() as f64 * PASS_OVERHEAD).ceil() as usize).max(min_per_pass);
-        ObjectStream { oid, transfer_len: container.len() as u64, next_repair: vec![0; blocks.len()], blocks, source, turn: 0, per_pass }
+        ObjectStream { oid, transfer_len: container.len() as u64, next_repair: vec![0; blocks.len()], blocks, source, turn: 0, per_pass, sent: 0 }
     }
 
     fn next(&mut self) -> EncodingPacket {
+        self.sent += 1;
         if let Some(packet) = self.source.pop_front() {
             return packet;
         }
@@ -144,6 +159,12 @@ pub struct Sender {
     palette: Vec<[u8; 3]>,
     header: Header,
     manifest: ObjectStream,
+    /// Manifest tiles per frame once its early passes are out (§4.2).
+    manifest_late: f64,
+    /// Each tile adds the manifest's share to this, and the tile that
+    /// brings it to MANIFEST_WHOLE carries the manifest, so its tiles are
+    /// spread evenly over successive frames however small the share.
+    manifest_credit: u64,
     objects: Vec<ObjectStream>,
     current: usize,
     sent_in_pass: usize,
@@ -179,6 +200,7 @@ impl Sender {
         let layout = Layout::new(&params);
         let min_per_pass = PASS_MIN_FRAMES * layout.tiles;
         let manifest = ObjectStream::new(0, &sealer.seal(0, &manifest::encode(&entries), true), t, min_per_pass);
+        let manifest_late = manifest.source.len() as f64 * PREVIEW_MARGIN / (PREVIEW_SECS * params.fps as f64);
         let objects = files
             .iter()
             .zip(&entries)
@@ -211,6 +233,9 @@ impl Sender {
             fallback,
             header,
             manifest,
+            manifest_late,
+            // The very first tile carries the manifest.
+            manifest_credit: MANIFEST_WHOLE - MANIFEST_WHOLE / MANIFEST_SHARE as u64,
             objects,
             current: 0,
             sent_in_pass: 0,
@@ -239,10 +264,22 @@ impl Sender {
         self.fallback.is_some() && SplitMix64::new(run).next_u64().is_multiple_of(every)
     }
 
-    /// Cell colours of the next frame. Every tenth tile carries the manifest
-    /// so late joiners see the file list first, its place moving one tile
-    /// per frame so frames of fewer than ten tiles still give it a tenth;
-    /// the rest walk through the objects one pass at a time (§4.2). Some
+    /// The manifest's share of each tile of a frame of `tiles` tiles, in
+    /// millionths: one in MANIFEST_SHARE during its early passes, then what
+    /// keeps `manifest_late` tiles per frame whichever mode the frame is
+    /// drawn in, but never more than the early share.
+    fn manifest_share(&self, tiles: usize) -> u64 {
+        let early = MANIFEST_WHOLE / MANIFEST_SHARE as u64;
+        if self.manifest.sent < MANIFEST_EARLY_PASSES * self.manifest.per_pass {
+            return early;
+        }
+        ((self.manifest_late / tiles as f64 * MANIFEST_WHOLE as f64).round() as u64).min(early)
+    }
+
+    /// Cell colours of the next frame. Tiles spread evenly over successive
+    /// frames carry the manifest, `manifest_share` of them, so late joiners
+    /// see the file list first and frames with few tiles still give it its
+    /// share; the rest walk through the objects one pass at a time (§4.2). Some
     /// frames are drawn in the fallback mode (`draws_fallback`), so a camera
     /// that cannot read this mode still completes without anyone changing a
     /// setting.
@@ -255,11 +292,13 @@ impl Sender {
         self.header.rs_level = header::level_for_parity(params.parity).expect("modes use a defined RS level");
         let (n, k) = (layout.tile_bytes, params.k());
         let capacity = tile::symbol_capacity(k);
-        let manifest_at = self.header.frame_no as usize % MANIFEST_SHARE;
+        let share = self.manifest_share(layout.tiles);
         let codewords: Vec<Vec<u8>> = (0..layout.tiles)
-            .map(|t| {
-                let use_manifest = self.objects.is_empty() || t % MANIFEST_SHARE == manifest_at;
+            .map(|_| {
+                self.manifest_credit += share;
+                let use_manifest = self.objects.is_empty() || self.manifest_credit >= MANIFEST_WHOLE;
                 let stream = if use_manifest {
+                    self.manifest_credit = self.manifest_credit.saturating_sub(MANIFEST_WHOLE);
                     &mut self.manifest
                 } else {
                     if self.sent_in_pass >= self.objects[self.current].per_pass {
@@ -734,6 +773,59 @@ mod tests {
             }
             let drawn = source - sender.manifest.source.len() + sender.manifest.turn;
             assert_eq!(drawn, sender.layout.tiles, "{mode}: {drawn} manifest tiles in {MANIFEST_SHARE} frames of {}", sender.layout.tiles);
+        }
+    }
+
+    /// A photo whose manifest entry carries a thumbnail the size the send
+    /// page makes (80 px, about 1.8 KB).
+    fn photo_with_thumbnail(rng: &mut SplitMix64) -> Vec<FileIn> {
+        let mut photo = vec![0u8; 300_000];
+        rng.fill(&mut photo);
+        let mut thumbnail = vec![0u8; 1800];
+        rng.fill(&mut thumbnail);
+        vec![FileIn { name: "photo.webp".into(), mime: "image/webp".into(), data: photo, thumbnail, compress: false }]
+    }
+
+    #[test]
+    fn after_its_early_passes_the_manifest_keeps_what_a_late_receiver_needs() {
+        for mode in ["compact", "standard"] {
+            // A session whose manifest has just gone out its early passes.
+            let start = || {
+                let receiver = Receiver::new([9; 32]);
+                let files = photo_with_thumbnail(&mut SplitMix64::new(3));
+                let mut sender = Sender::new(&receiver.key_qr(caps()), [4; 32], files, Params::mode(mode).unwrap(), 1).unwrap();
+                while sender.manifest.sent < MANIFEST_EARLY_PASSES * sender.manifest.per_pass {
+                    sender.next_frame();
+                }
+                (receiver, sender)
+            };
+            let (_, mut sender) = start();
+            let (sent, frames) = (sender.manifest.sent, 300);
+            for _ in 0..frames {
+                sender.next_frame();
+            }
+            let per_frame = (sender.manifest.sent - sent) as f64 / frames as f64;
+            let tenth = sender.layout.tiles as f64 / MANIFEST_SHARE as f64;
+            assert!(per_frame < tenth / 2.0, "{mode}: {per_frame:.2} manifest tiles a frame against a tenth's {tenth:.2}");
+
+            // A receiver that starts only now, or a few frames later, and
+            // misses every fourth frame reads the file list within PREVIEW_SECS.
+            for late in [0, 7, 19] {
+                let (mut receiver, mut sender) = start();
+                let p = sender.params().clone();
+                for _ in 0..late {
+                    sender.next_frame();
+                }
+                let limit = (PREVIEW_SECS * p.fps as f64) as usize;
+                let shown = (1..=limit).find(|shown| {
+                    let cells = sender.next_frame();
+                    if shown % 4 != 0 {
+                        receiver.push(&render::rasterize(&cells, p.w, p.h, 5));
+                    }
+                    receiver.manifest().is_some()
+                });
+                assert!(shown.is_some(), "{mode}, {late} frames later: no file list within {limit} frames");
+            }
         }
     }
 

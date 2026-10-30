@@ -65,14 +65,18 @@ Consequences of this approach:
 ### 4.2 Send order (sender schedule)
 
 ```
-Tiles in each frame:  allocate 1/10 to OID 0 (streamed continuously)
-                      the remaining ~90% send the body objects in OID order:
+Tiles in each frame:  allocate a share to OID 0 (streamed continuously):
+                        1/10 while OID 0 goes out its first 2 passes,
+                        then what a receiver starting late needs to read it within 5 s
+                      the remaining tiles send the body objects in OID order:
                         once oid i's source symbols + repair symbols (K_i × 1.1, at least 2 frames' worth of tiles) are sent, move to i+1
                       after the last object, return to the first and keep cycling with repair symbols
 ```
 
 - Because OID 0 is constantly mixed in, the list and thumbnails appear first even when reception starts midway
-- The tiles allocated to OID 0 are those whose tile number t satisfies `t mod 10 = frame_no mod 10`. Since the position shifts by one each frame, OID 0's share is 1/10 even in frames with fewer than 10 tiles (3 in Stable mode, 9 in Compact mode)
+- OID 0's share is 1/10 of the tiles until it has been sent twice through (2 passes of K₀ × 1.1 symbols, at least 2 frames' worth of tiles; `MANIFEST_EARLY_PASSES`). A receiver watching from the start reads the list from these
+- After that, OID 0 keeps only K₀ × 1.5 symbols per 5 seconds of frames (`PREVIEW_SECS`, `PREVIEW_MARGIN`): enough for a receiver that starts late and misses a quarter of the frames to read the list within about 5 seconds. The share never goes above 1/10, and it is the same number of tiles per frame whichever mode a frame is drawn in. The rest of the tenth goes to the files. A manifest of one 300 KB image with a typical thumbnail (about 1.8 KB) then takes about 4% of Compact's tiles and about 1.4% of Standard's
+- Which tiles carry OID 0 is decided by a running total: each tile adds OID 0's share, and the tile that brings it to a whole tile carries OID 0. Its tiles are thus spread evenly over successive frames, at any share and in frames with fewer tiles than 10 (3 in Stable mode, 9 in Compact mode). The very first tile carries OID 0
 - Each pass is made to span at least 2 frames because, if one pass of a small file (such as text that fits in a few symbols) fit in a single frame, missing just that frame would mean waiting a full cycle of the large files (about 50 seconds for a 300 KB image)
 - Because bodies are sent in order, small files and earlier files complete first
 - Anything missed in the first cycle is compensated for by repair symbols in the second and later cycles
@@ -229,7 +233,7 @@ Payload per frame is tiles × T from the actual layout (`bos-lab layout`). With 
   - The header of a Stable frame records bpc = 1 and rs_level = 2. Both modes have the same symbol size T (§6.3), so they carry the same RaptorQ symbols, and the receiver combines symbols from both for recovery
   - The receiver reads the modes of the same grid with a single sampling pass. The markers and header band are in the same positions and only the color order of the palette strips differs by bpc, so it calibrates with each mode's palette strips, reads the header, and reads the tiles of whichever mode the header's bpc and rs_level match
   - A camera that can read Compact normally completes within the first cycle, where Stable is 1 in 4 frames, so the average per frame drops from 9 tiles to 7.5 tiles (38 seconds instead of 33 for a 300 KB image; §11)
-  - A camera that cannot distinguish colors (dark, blurred, color bleeding, etc.) starts collecting Stable frames from the first frame and can complete with those alone. In the first cycle Stable frames average 3.75 per second, and from the second cycle 7.5 per second, with 1/10 going to the manifest. For a 300 KB image this takes 198–199 seconds (§11). The user does not need to reconfigure anything
+  - A camera that cannot distinguish colors (dark, blurred, color bleeding, etc.) starts collecting Stable frames from the first frame and can complete with those alone. In the first cycle Stable frames average 3.75 per second, and from the second cycle 7.5 per second, with up to 1/10 going to the manifest (§4.2). For a 300 KB image this takes 198–199 seconds (§11). The user does not need to reconfigure anything
   - The ratio balances the two cases (simulation in §11): mixing in Stable 1 in 3 throughout gives 40 seconds for a camera that can read Compact and 277 seconds for one that cannot; 1 in 2 throughout gives 46 and 183 seconds; starting the mix only after the first cycle makes the camera that cannot read Compact wait out that cycle (210 seconds). Fewer in the first cycle and more afterward lets cameras that can read Compact finish almost entirely within the first cycle, while cameras that cannot catch up after it
 
 ## 7. Upper layers
@@ -308,7 +312,7 @@ web/                        # static PWA: send.html, receive.html, lab.html, Wor
 | Fast | 8496 B | 30 | 248.9 KB/s | 199.1 KB/s |
 | Fastest | 9027 B | 60 | 528.9 KB/s | 423.1 KB/s |
 
-- Ideal rates are from `bos-lab layout` (1 KB = 1024 B). They exclude the RaptorQ overhead, the 1/10 of tiles spent on the manifest, and the wait for cycling through the objects and back
+- Ideal rates are from `bos-lab layout` (1 KB = 1024 B). They exclude the RaptorQ overhead, the tiles spent on the manifest (§4.2), and the wait for cycling through the objects and back
 - The actual limit is set by the receiver's analysis speed (whether one frame can be processed within the capture period), the camera's resolution and fps, the color classification error rate, and the sender's display fps
 - Analysis time in wasm on V8 (Node 22, Mac): 27 ms in Standard, 40 ms in Fast, and 50 ms in Fastest for a 1920×1080 capture, including ground-truth comparison (`lab.html`); a receive session (`rx_push`) takes 10.8–10.9 ms per capture when run alone (around 18 ms when run alongside other measurements), including the reference color re-measurement
 
@@ -323,6 +327,7 @@ End-to-end simulation (wasm sender connected directly to the wasm receiver; 1/4 
 
 - In black and white, Compact's 4 colors become grays only 85 apart and no Compact frame is readable; the Compact stream completes from the mixed-in Stable frames alone. The test `a_camera_that_cannot_read_compact_completes_from_the_stable_frames` in `session.rs` verifies that, with such a camera, nothing arrives without the Stable frames and the transfer completes with them
 - With reference color re-measurement (§6.4), every session reads all Compact tiles
+- The image above carries a 6 KB thumbnail. Its manifest needs more than 1/10 of Compact's tiles to reach a late receiver within 5 seconds, so Compact keeps the full 1/10 (38.0 s). With a thumbnail of the size the send page makes (about 1.8 KB), the manifest's later share (§4.2) shortens Compact from 38.0 to 35.4 s and Standard from 10.9 to 10.3 s; with the 6 KB thumbnail Standard goes from 10.9 to 10.6 s
 
 ## 12. Tests
 
@@ -340,6 +345,6 @@ End-to-end simulation (wasm sender connected directly to the wasm receiver; 1/4 
     - `files_arrive_intact_despite_dropped_frames` (30% of frames dropped), `every_mode_completes_a_transfer`, `finished_files_are_hashed_once_and_drop_their_decoder`, `frames_for_another_receiver_are_ignored`
     - Tracking: `tracking_follows_small_motion_and_falls_back_after_a_jump`, `a_receiver_tracks_across_interleaved_modes`
     - Mode choice: `picks_the_fastest_mode_the_receiver_can_take`, `a_small_screen_gets_compact_only_from_a_receiver_that_takes_it`
-    - Schedule: `the_manifest_gets_a_tenth_of_the_tiles_however_few_a_frame_has`
+    - Schedule: `the_manifest_gets_a_tenth_of_the_tiles_however_few_a_frame_has`, `after_its_early_passes_the_manifest_keeps_what_a_late_receiver_needs` (after the early passes the manifest gets under half its tenth, and a receiver that starts then, or 7 or 19 frames later, and misses every fourth frame reads the file list within 5 seconds of frames in Compact and Standard)
     - Compact stream: `a_compact_stream_falls_back_to_stable_frames_carrying_the_same_symbols`, `stable_frames_are_mixed_in_from_the_first_frame_and_more_after_a_pass`, `a_camera_that_cannot_read_compact_completes_from_the_stable_frames`, `a_capture_torn_within_a_run_loses_only_the_tile_under_the_tear`
 - wasm: `node web/test/e2e.mjs` (after `./web/build.sh`) exercises the exported API end to end without a browser: reading the key QR with `rqrr`, mode choice for a PC-sized and a phone-sized sender, matching fingerprints, sending 2 files, and receiving and verifying their contents and thumbnails
