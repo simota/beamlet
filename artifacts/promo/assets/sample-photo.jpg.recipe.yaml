@@ -1,0 +1,15 @@
+engine: imagen
+model: unreported
+prompt: |
+  A breathtaking, crisp twilight photograph of Mount Fuji reflected in a calm dark lake under a clear dusk sky with subtle cyan-blue and magenta horizon glow — used as the sample photograph transferred between two devices in the product demo.
+  Style: Realistic high-resolution architectural/landscape photography, clean composition, vivid natural twilight contrast.
+  Exclude: text, watermarks, borders, frames, UI elements, people.
+excluded: text, watermarks, borders, frames, UI elements, people
+size:
+  asked: 16:9
+  on_disk: 1920x1080
+inputs: []
+output:
+  generated: beamlet_sample_photo.jpg
+  placed: artifacts/promo/assets/sample-photo.jpg
+note: IRREPRODUCIBLE — exact pixel regeneration not guaranteed; retained artifact verified at 1920x1080 JPEG.

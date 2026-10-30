@@ -1,0 +1,21 @@
+{
+  "fingerprint": "667855",
+  "scannedMode": 2,
+  "qrModulesSide": 29,
+  "stableSize": [
+    136,
+    80
+  ],
+  "compactSize": [
+    136,
+    80
+  ],
+  "standardSize": [
+    200,
+    116
+  ],
+  "fastSize": [
+    264,
+    152
+  ]
+}

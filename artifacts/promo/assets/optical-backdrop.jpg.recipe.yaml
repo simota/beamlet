@@ -1,0 +1,16 @@
+engine: imagen
+model: unreported
+prompt: |
+  Minimalist dark cinema background suggesting precision optical glass refraction and a subtle horizontal beam of light in deep darkness.
+  Style: Ultra-clean Apple keynote hardware film lighting, subtle anamorphic lens refraction, smooth dark obsidian glass surface, high restraint, mostly dark negative space (#05070d) so UI and typography placed on top remain 100% legible.
+  Colours: Deep obsidian #05070d background (85% of frame), subtle electric cyan (#3ef2ff) and faint laser magenta (#ff3ec8) optical caustics only. No other hues.
+  Exclude: text, letters, numbers, logos, watermarks, QR codes, busy sci-fi HUD clutter, circuit boards, people, faces, noisy grain.
+excluded: text, letters, numbers, logos, watermarks, QR codes, busy sci-fi HUD clutter, circuit boards, people, faces, noisy grain
+size:
+  asked: 16:9
+  on_disk: 1920x1080
+inputs: []
+output:
+  generated: beamlet_optical_backdrop.jpg
+  placed: artifacts/promo/assets/optical-backdrop.jpg
+note: IRREPRODUCIBLE — exact pixel regeneration not guaranteed; retained artifact verified at 1920x1080 JPEG.

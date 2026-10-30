@@ -1,0 +1,27 @@
+{
+  "name": "beamlet-promo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "assets": "node scripts/generate-bos-assets.mjs && python3 scripts/generate-audio.py",
+    "capture-ui": "python3 scripts/capture-real-ui.py",
+    "render": "remotion render src/index.ts BeamletPromo ../final-promo.mp4 --codec=h264 --crf=16 --pixel-format=yuv420p",
+    "render:pipe": "python3 scripts/render-video.py ../final-promo.mp4",
+    "compress": "python3 scripts/compress-video.py",
+    "verify": "python3 scripts/verify-render.py ../final-promo.mp4 ../previews/final",
+    "studio": "remotion studio src/index.ts"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.539",
+    "@remotion/renderer": "4.0.539",
+    "pngjs": "^7.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "4.0.539"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "typescript": "^5.7.2"
+  }
+}
