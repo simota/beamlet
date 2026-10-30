@@ -93,6 +93,7 @@ function transfer(files, limit, onFrame = () => {}) {
     assert.ok(fresh <= (r & 0xfff), 'new symbols never exceed tiles read');
     symbols += fresh;
     status = JSON.parse(new TextDecoder().decode(output(w.rx_status())));
+    assert.equal(status.fallback_advised, false, `frame ${shown}: a camera that reads every colour is not told to switch`);
     if (!status.complete) continue;
     assert.ok(symbols > 0, 'new symbols are counted');
     for (const [i, f] of files.entries()) {
@@ -128,23 +129,21 @@ start(files, w.tx_mode(0), rxFp);
 assert.equal(w.tx_fallback_only(0), 0, 'standard has no stable frames to send alone');
 transfer(files, 200);
 
-// A phone-sized sender gets compact, with stable frames mixed in. Partway
-// through it switches to stable frames alone, as for a camera that cannot
-// tell compact's colours apart; the receiver keeps the same session and
-// what it has already received.
+// A phone-sized sender gets compact, with no stable frames in its first
+// pass. Partway through it switches to stable frames alone, as for a
+// camera that cannot tell compact's colours apart; the receiver keeps the
+// same session and what it has already received.
 rxFp = pair();
 assert.equal(w.tx_mode(1), 1, 'a phone-sized sender gets compact mode');
 start(files, w.tx_mode(1), rxFp);
 assert.equal(w.tx_fallback_only(0), 1, 'compact has stable frames to send alone');
 const SWITCH_AT = 30;
-const before = { colour: 0, grey: 0 };
 const shown = transfer(files, 1000, (frame, shown) => {
-  if (shown >= SWITCH_AT) {
+  if (shown < SWITCH_AT) {
+    assert.ok(colourful(frame), `frame ${shown} of the first pass is drawn in compact`);
+    if (shown === SWITCH_AT - 1) assert.equal(w.tx_fallback_only(1), 1);
+  } else {
     assert.ok(!colourful(frame), `frame ${shown} after the switch is black and white`);
-    return;
   }
-  before[colourful(frame) ? 'colour' : 'grey']++;
-  if (shown === SWITCH_AT - 1) assert.equal(w.tx_fallback_only(1), 1);
 });
-assert.ok(before.colour > 0 && before.grey > 0, `compact and stable frames before the switch: ${JSON.stringify(before)}`);
 assert.ok(shown > SWITCH_AT, 'the transfer went on past the switch');

@@ -44,21 +44,23 @@ const PASS_OVERHEAD: f64 = 1.1;
 /// otherwise fit in one frame, and losing that frame would leave the file
 /// waiting a whole pass of the large one.
 const PASS_MIN_FRAMES: usize = 2;
-/// One frame in this many is drawn in the fallback mode during the first
-/// pass over all objects, and one in FALLBACK_LATER after it (§6.6). A
-/// camera that reads the faster mode mostly finishes within the first
-/// pass, so a quarter there costs it a sixth of the speed; one that
-/// cannot read it collects fallback frames from the first frame on, and
-/// half the frames from then on bring it home in about the time stable
-/// alone would take.
-const FALLBACK_FIRST: u64 = 4;
-const FALLBACK_LATER: u64 = 2;
-/// Fallback frames come in runs of this many frames (200 ms at 15 fps)
+/// Quarters of the frames drawn in the fallback mode in the first pass over
+/// all objects, the second, and every pass after (§6.6). A camera that
+/// reads the faster mode mostly finishes within the first two passes and
+/// loses nothing to fallback frames in the first. One that cannot read it
+/// gets nothing in the first pass, and the receiver advises the sender to
+/// draw the fallback alone (`Receiver::fallback_advised`); left as it is,
+/// it catches up on the passes after, three quarters fallback.
+const FALLBACK_QUARTERS: [u64; 3] = [0, 1, 3];
+/// Fallback frames come in runs of this many frames (400 ms at 15 fps)
 /// rather than one at a time. A capture torn between two frames of a run
 /// loses only the tile under the tear, as within any single mode, while
 /// one torn between a fallback frame and a faster-mode frame loses the
 /// tiles below the tear; runs make such captures rarer.
-const FALLBACK_RUN: u32 = 3;
+const FALLBACK_RUN: u32 = 6;
+/// Captures that read, about a second at 30 fps, over which the receiver
+/// judges whether it can read a mode that has a fallback.
+const ADVICE_WINDOW: usize = 30;
 
 /// Widest grid a phone-sized sender shows: a PC webcam sees a phone screen
 /// at only about 2.5 pixels per cell of a 128-cell grid (§6.6).
@@ -88,6 +90,15 @@ pub struct FileIn {
     pub thumbnail: Vec<u8>,
     /// Deflate before encrypting; off for already-compressed media (§4.3).
     pub compress: bool,
+}
+
+/// The built-in mode drawn in place of `p` for a camera that cannot tell
+/// its colours apart: the same grid with fewer bits per cell and the same
+/// symbol size, so its frames carry the same symbols (compact → stable).
+fn fallback_for(p: &Params) -> Option<Params> {
+    params::mode_names()
+        .map(|n| Params::mode(n).expect("built-in mode"))
+        .find(|f| (f.w, f.h) == (p.w, p.h) && f.bpc < p.bpc && symbol_size(f) == symbol_size(p))
 }
 
 /// RaptorQ symbol size for a mode: the tile's symbol field rounded down to
@@ -209,14 +220,11 @@ impl Sender {
             .map(|(f, e)| ObjectStream::new(e.oid, &sealer.seal(e.oid, &f.data, f.compress), t, min_per_pass))
             .collect();
 
-        let fallback = params::mode_names()
-            .map(|n| Params::mode(n).expect("built-in mode"))
-            .find(|f| (f.w, f.h) == (params.w, params.h) && f.bpc < params.bpc && symbol_size(f) == t)
-            .map(|f| {
-                let layout = Layout::new(&f);
-                let palette = f.palette().expect("modes use a defined palette");
-                (f, layout, palette)
-            });
+        let fallback = fallback_for(&params).map(|f| {
+            let layout = Layout::new(&f);
+            let palette = f.palette().expect("modes use a defined palette");
+            (f, layout, palette)
+        });
         let header = Header {
             session_id,
             pk_e,
@@ -268,15 +276,15 @@ impl Sender {
     }
 
     /// Whether the next frame is drawn in the fallback mode: every frame
-    /// under `set_fallback_only`, otherwise one run of FALLBACK_RUN frames
-    /// in FALLBACK_FIRST during the first pass and one in FALLBACK_LATER
-    /// after it. Runs are picked by a hash of their number rather than in
-    /// turn, so a camera that drops every second or fourth frame loses no
-    /// more of the fallback frames than of the rest.
+    /// under `set_fallback_only`, otherwise runs of FALLBACK_RUN frames, as
+    /// many quarters of them as FALLBACK_QUARTERS gives this pass. Runs are
+    /// picked by a hash of their number rather than in turn, so a camera
+    /// that drops every second or fourth frame loses no more of the
+    /// fallback frames than of the rest.
     fn draws_fallback(&self) -> bool {
-        let every = if self.passes == 0 { FALLBACK_FIRST } else { FALLBACK_LATER };
+        let quarters = FALLBACK_QUARTERS[self.passes.min(FALLBACK_QUARTERS.len() - 1)];
         let run = u64::from(self.header.frame_no / FALLBACK_RUN);
-        self.fallback.is_some() && (self.fallback_only || SplitMix64::new(run).next_u64().is_multiple_of(every))
+        self.fallback.is_some() && (self.fallback_only || SplitMix64::new(run).next_u64() % 4 < quarters)
     }
 
     /// The manifest's share of each tile of a frame of `tiles` tiles, in
@@ -396,6 +404,9 @@ pub struct Receiver {
     object_count: Option<u8>,
     incoming: BTreeMap<u8, Incoming>,
     manifest: Option<Vec<Entry>>,
+    /// The last ADVICE_WINDOW captures that read: tiles read and tiles
+    /// shown for one drawn in a mode that has a fallback, None otherwise.
+    recent: VecDeque<Option<(usize, usize)>>,
 }
 
 impl Receiver {
@@ -424,6 +435,7 @@ impl Receiver {
             object_count: None,
             incoming: BTreeMap::new(),
             manifest: None,
+            recent: VecDeque::with_capacity(ADVICE_WINDOW + 1),
         }
     }
 
@@ -487,6 +499,11 @@ impl Receiver {
         };
         let (p, layout, _) = &self.candidates[i];
         let tiles = frame::read_tiles(&colors, layout, &classifier.refine(&colors, layout), p.bpc, p.k());
+        let read = tiles.iter().flatten().count();
+        self.recent.push_back(fallback_for(p).map(|_| (read, tiles.len())));
+        if self.recent.len() > ADVICE_WINDOW {
+            self.recent.pop_front();
+        }
         self.active = i;
         self.tracked = Some((i, grid));
         progress.synced = true;
@@ -599,6 +616,22 @@ impl Receiver {
             Some(Incoming::Verified(data)) => Some((entry, data.as_slice())),
             _ => None,
         }
+    }
+
+    /// Whether the sender should draw its fallback alone
+    /// (`Sender::set_fallback_only`): at least a quarter of the last
+    /// ADVICE_WINDOW captures that read were drawn in a mode that has a
+    /// fallback, and those gave under a tenth of their tiles — a camera
+    /// that cannot tell that mode's colours apart (§6.6). It clears once
+    /// such frames stop arriving.
+    pub fn fallback_advised(&self) -> bool {
+        let (mut frames, mut read, mut shown) = (0, 0, 0);
+        for &(r, s) in self.recent.iter().flatten() {
+            frames += 1;
+            read += r;
+            shown += s;
+        }
+        frames * 4 >= ADVICE_WINDOW && read * 10 < shown
     }
 
     pub fn complete(&self) -> bool {
@@ -941,6 +974,17 @@ mod tests {
         Rgb { w: iw, h: ih, px: out }
     }
 
+    /// A 128 × 72 frame as the weak camera sees it at 2.565 pixels per cell,
+    /// averaged to grey.
+    fn monochrome(cells: &[[u8; 3]]) -> Rgb {
+        let mut img = weak_camera(cells, 128, 72, 2.565);
+        for px in img.px.chunks_mut(3) {
+            let luma = ((px[0] as u32 + px[1] as u32 + px[2] as u32) / 3) as u8;
+            px.fill(luma);
+        }
+        img
+    }
+
     /// Frames shown until a monochrome webcam that sees the phone at 2.565
     /// pixels per cell, and misses every fourth frame, completes a compact
     /// stream; None if it has not after `limit` frames.
@@ -950,12 +994,7 @@ mod tests {
             if shown % 4 == 0 {
                 continue;
             }
-            let mut img = weak_camera(&cells, 128, 72, 2.565);
-            for px in img.px.chunks_mut(3) {
-                let luma = ((px[0] as u32 + px[1] as u32 + px[2] as u32) / 3) as u8;
-                px.fill(luma);
-            }
-            receiver.push(&img);
+            receiver.push(&monochrome(&cells));
             if receiver.complete() {
                 return Some(shown);
             }
@@ -1000,39 +1039,66 @@ mod tests {
     }
 
     #[test]
-    fn stable_frames_are_mixed_in_from_the_first_frame_and_more_after_a_pass() {
-        let mut photo = vec![0u8; 300_000];
-        SplitMix64::new(8).fill(&mut photo);
-        let file = FileIn { name: "photo.jpg".into(), mime: "image/jpeg".into(), data: photo, thumbnail: vec![], compress: false };
+    fn stable_frames_are_mixed_in_from_the_second_pass_and_more_after_it() {
         let receiver = Receiver::new([9; 32]);
-        let mut sender = Sender::new(&receiver.key_qr(caps()), [4; 32], vec![file], Params::mode("compact").unwrap(), 1).unwrap();
-        // Whether each of the next `runs` runs of frames was drawn in the fallback mode.
-        let drawn = |runs: usize, sender: &mut Sender| {
-            while !sender.header.frame_no.is_multiple_of(FALLBACK_RUN) {
+        let files = photo_with_thumbnail(&mut SplitMix64::new(8));
+        let mut sender = Sender::new(&receiver.key_qr(caps()), [4; 32], files, Params::mode("compact").unwrap(), 1).unwrap();
+        // Share of the next `runs` runs of frames drawn in the fallback
+        // mode, each run drawn in one mode, all within pass `pass`.
+        let share = |runs: usize, pass: usize, sender: &mut Sender| {
+            while sender.passes < pass || !sender.header.frame_no.is_multiple_of(FALLBACK_RUN) {
                 sender.next_frame();
             }
-            (0..runs * FALLBACK_RUN as usize)
+            let drawn: Vec<bool> = (0..runs * FALLBACK_RUN as usize)
                 .map(|_| {
                     let fallback = sender.draws_fallback();
                     sender.next_frame();
                     fallback
                 })
-                .collect::<Vec<bool>>()
-        };
-        let share = |drawn: &[bool]| {
+                .collect();
+            assert_eq!(sender.passes, pass, "{runs} runs lie within pass {pass}");
             for run in drawn.chunks(FALLBACK_RUN as usize) {
                 assert!(run.iter().all(|&f| f == run[0]), "a run is drawn in one mode: {run:?}");
             }
             drawn.iter().filter(|&&f| f).count() as f64 / drawn.len() as f64
         };
-        let first = share(&drawn(100, &mut sender));
-        assert_eq!(sender.passes, 0, "300 frames lie within the first pass");
-        assert!((0.15..0.35).contains(&first), "first pass: {first}");
-        while sender.passes == 0 {
-            sender.next_frame();
+        assert_eq!(share(40, 0, &mut sender), 0.0, "first pass");
+        let second = share(40, 1, &mut sender);
+        assert!((0.1..0.4).contains(&second), "second pass: {second}");
+        let later = share(100, 2, &mut sender);
+        assert!((0.65..0.85).contains(&later), "third pass: {later}");
+    }
+
+    #[test]
+    fn a_camera_that_cannot_read_compact_is_advised_to_take_stable_frames_alone() {
+        let start = || {
+            let mut rng = SplitMix64::new(8);
+            let receiver = Receiver::new([9; 32]);
+            let sender = Sender::new(&receiver.key_qr(caps()), [4; 32], files(&mut rng), Params::mode("compact").unwrap(), 1).unwrap();
+            (sender, receiver)
+        };
+        // A camera that reads compact is never advised to switch.
+        let (mut sender, mut receiver) = start();
+        for _ in 0..200 {
+            receiver.push(&render::rasterize(&sender.next_frame(), 128, 72, 5));
+            assert!(!receiver.fallback_advised());
         }
-        let later = share(&drawn(100, &mut sender));
-        assert!((0.4..0.6).contains(&later), "after it: {later}");
+
+        // A monochrome one is, within a second of compact frames, and the
+        // advice clears once the sender draws stable frames alone.
+        let (mut sender, mut receiver) = start();
+        let advised = (1..=ADVICE_WINDOW).find(|_| {
+            assert!(receiver.push(&monochrome(&sender.next_frame())).synced, "it reads the headers");
+            receiver.fallback_advised()
+        });
+        assert!(advised.is_some(), "no advice within {ADVICE_WINDOW} captures");
+        sender.set_fallback_only(true);
+        let cleared = (1..=ADVICE_WINDOW).find(|_| {
+            receiver.push(&monochrome(&sender.next_frame()));
+            !receiver.fallback_advised()
+        });
+        assert!(cleared.is_some(), "the advice stays after the switch");
+        assert!(shown_to_a_monochrome_camera(&mut sender, &mut receiver, 2000).is_some());
     }
 
     /// A capture whose rows from the middle down show the next frame, as a
@@ -1074,6 +1140,9 @@ mod tests {
         let mut rng = SplitMix64::new(8);
         let mut receiver = Receiver::new([9; 32]);
         let mut sender = Sender::new(&receiver.key_qr(caps()), [4; 32], files(&mut rng), Params::mode("compact").unwrap(), 1).unwrap();
+        while sender.passes == 0 {
+            sender.next_frame();
+        }
         let first = receiver.push(&next_compact_frame(&mut sender).0);
         assert!(first.synced);
         let mut seen = HashSet::new();

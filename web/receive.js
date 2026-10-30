@@ -91,10 +91,17 @@ function progress(files) {
   return total ? Math.min(99, Math.floor((100 * got) / total)) : 0;
 }
 
+// The sender's colours do not read on this camera, but its black-and-white
+// frames would; the sender can switch to them without starting over.
+// #TODO(agent): UNVERIFIED — see this advice on the real receive page with a camera that cannot read compact; only the wasm flag is covered, by session.rs tests and web/test/e2e.mjs.
+const FALLBACK_HINT = '送信側の色を読み取れていません。送信側の画面をタップして止め、「安定だけで送る」をオンにしてから送信を再開してください。受信済みのデータは残ります。';
+
 function showPhase(r, elapsed) {
   if (r.status.files) overall = progress(r.status.files);
   if (r.status.complete) {
     setPhase('すべて受信しました', '下の一覧から各ファイルを保存してください。', 100);
+  } else if (r.synced && r.status.fallback_advised) {
+    setPhase(r.status.files ? `受信中 ${overall}%` : '受信中 — 色を読み取れていません', FALLBACK_HINT, r.status.files ? overall : null);
   } else if (r.synced && r.status.files) {
     setPhase(`受信中 ${overall}%`, 'このまま送信側の画面を映し続けてください。', overall);
   } else if (r.synced) {
