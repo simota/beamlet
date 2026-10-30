@@ -226,8 +226,14 @@ ul.note { padding-left: 1.2em; }
   opacity: 0.6;
 }
 
-/* Receiving states are static colours: animation would compete with the
-   capture loop for the main thread. Only completion pulses, once. */
+/* Electric arcs round the sender's frame while receiving, and a time
+   jump on completion (spark-worker.js). The canvas covers the preview
+   only and is drawn by a worker on an OffscreenCanvas, so it never
+   competes with the capture loop for the main thread. */
+.viewfinder .spark { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+/* Receiving states are static colours: CSS animation would compete with
+   the capture loop for the main thread. Only completion pulses, once. */
 #step-receive[data-state="searching"] { --vf: var(--cyan); }
 #step-receive[data-state="foreign"] { --vf: var(--warn); }
 #step-receive[data-state="synced"] { --vf: var(--ok); }

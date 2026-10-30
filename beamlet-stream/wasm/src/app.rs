@@ -133,6 +133,20 @@ pub extern "C" fn rx_symbols_new() -> u32 {
     with(|app| app.symbols_new)
 }
 
+/// Corners of the sender frame the last `rx_push` read, quiet zone
+/// included, as 8 little-endian f32 (x, y of top left, top right, bottom
+/// right, bottom left of its grid) in capture pixels; null if it did not read.
+#[no_mangle]
+pub extern "C" fn rx_frame_corners() -> *const u8 {
+    with(|app| match app.receiver.as_ref().expect("rx_new first").frame_corners() {
+        Some(corners) => {
+            let bytes = corners.iter().flat_map(|&(x, y)| [x as f32, y as f32]).flat_map(f32::to_le_bytes).collect();
+            emit(app, bytes)
+        }
+        None => std::ptr::null(),
+    })
+}
+
 /// Session state as JSON: {"complete":bool,"fallback_advised":bool,"files":[{oid,name,mime,size,state,received,needed}]|null}.
 /// `fallback_advised`: the camera cannot read the sender's colours, which
 /// should switch to 「安定だけで送る」 (`Receiver::fallback_advised`).

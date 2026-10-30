@@ -121,6 +121,45 @@ function showPhase(r, elapsed) {
   }
 }
 
+// The electric effect round the sender's frame in the viewfinder. It is
+// drawn by spark-worker.js on an OffscreenCanvas; this page only maps the
+// frame's corners from capture pixels onto the preview, so the capture
+// loop keeps the main thread. Without OffscreenCanvas there is no effect.
+const spark = (() => {
+  const canvas = $('spark');
+  if (!canvas.transferControlToOffscreen) {
+    canvas.hidden = true;
+    return null;
+  }
+  const w = new Worker('spark-worker.js', { type: 'module' });
+  const offscreen = canvas.transferControlToOffscreen();
+  const motion = matchMedia('(prefers-reduced-motion: reduce)');
+  w.postMessage({ type: 'init', canvas: offscreen, reduced: motion.matches }, [offscreen]);
+  motion.addEventListener('change', () => w.postMessage({ type: 'reduced', reduced: motion.matches }));
+  let box = { width: 0, height: 0 }, dpr = 1;
+  new ResizeObserver(([entry]) => {
+    box = entry.contentRect;
+    dpr = devicePixelRatio || 1;
+    w.postMessage({ type: 'size', width: Math.round(box.width * dpr), height: Math.round(box.height * dpr), dpr });
+  }).observe($('video'));
+  return {
+    /// `corners` in pixels of a cw×ch capture (or null), placed where the
+    /// preview shows them: the video is fitted into its box (object-fit:
+    /// contain), so the capture is scaled and centred the same way.
+    frame(corners, cw, ch, level, fresh) {
+      let mapped = null;
+      if (corners && cw && ch) {
+        const s = Math.min(box.width / cw, box.height / ch);
+        const ox = (box.width - cw * s) / 2, oy = (box.height - ch * s) / 2;
+        mapped = [0, 2, 4, 6].map((i) => [(ox + corners[i] * s) * dpr, (oy + corners[i + 1] * s) * dpr]);
+      }
+      w.postMessage({ type: 'frame', corners: mapped, level, fresh });
+    },
+    jump: () => w.postMessage({ type: 'jump' }),
+    clear: () => w.postMessage({ type: 'clear' }),
+  };
+})();
+
 // Captures are scaled so their long side is at most this many pixels: a
 // camera that delivers 4K would otherwise quadruple every frame's copies.
 const MAX_CAPTURE = 1920;
@@ -165,12 +204,14 @@ async function startCamera() {
     }
     $('step-receive').dataset.state = r.status.complete ? 'done' : r.synced ? 'synced' : r.detected ? 'foreign' : 'searching';
     showPhase(r, now - started);
+    spark?.frame(r.corners, canvas.width, canvas.height, overall / 100, r.symbolsNew > 0);
     const avg = (ms) => (ms / decoded).toFixed(1);
     $('status').textContent =
       `${r.synced ? `${r.ok}/${r.total} タイル${r.tracked ? '（追跡）' : ''}、` : ''}カメラ ${canvas.width}×${canvas.height}、` +
       `処理 ${rate.toFixed(1)} fps（取得 ${avg(grabMs)}・コピー ${avg(copyMs)}・解析 ${avg(analyzeMs)} ms）、` +
       `新規 ${((symbols * 1000) / (now - started)).toFixed(0)} シンボル/秒`;
     if (r.status.complete) {
+      spark?.jump();
       stop?.();
       $('stop').hidden = true;
       $('again').hidden = false;
@@ -235,6 +276,7 @@ $('start').onclick = start;
 $('stop').onclick = () => {
   if (stop) {
     stop();
+    spark?.clear();
     $('step-receive').dataset.state = 'stopped';
     setPhase('停止しました', '「受信を再開する」で続きから受信できます。受信済みのデータは残っています。', overall);
     $('status').textContent = '';

@@ -49,6 +49,13 @@ pub struct Grid {
 }
 
 impl Grid {
+    /// Where cell point (`x`, `y`) lies in the capture by the homography
+    /// alone, without the alignment offsets: for points outside the marker
+    /// lattice, such as the frame's outer corners.
+    pub fn project(&self, x: f64, y: f64) -> (f64, f64) {
+        self.h.apply(x, y)
+    }
+
     /// `x`, `y` in continuous cell units: cell (i, j) spans [i, i+1) × [j, j+1).
     pub fn locate(&self, x: f64, y: f64) -> (f64, f64) {
         let (bx, by) = self.h.apply(x, y);

@@ -29,6 +29,7 @@ self.onmessage = ({ data: msg }) => {
       const r = wasm.rx_push(msg.width, msg.height);
       const copyMs = t1 - t0, analyzeMs = performance.now() - t1;
       const symbolsNew = wasm.rx_symbols_new();
+      const corners = wasm.rx_frame_corners();
       const status = JSON.parse(text(output(wasm.rx_status())));
       // Each verified file is sent once, its buffer transferred.
       const files = [];
@@ -55,6 +56,8 @@ self.onmessage = ({ data: msg }) => {
           copyMs,
           analyzeMs,
           symbolsNew,
+          // x, y of the sender frame's corners in capture pixels, or null.
+          corners: corners ? Array.from(new Float32Array(output(corners).buffer)) : null,
           status,
           files,
           thumbs,

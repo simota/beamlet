@@ -289,7 +289,7 @@ web/                        # static PWA: send.html, receive.html, lab.html, Wor
 ```
 
 - Image conversion and thumbnail generation run in the page (`web/images.js`, `OffscreenCanvas.convertToBlob`), and the resulting bytes are passed to wasm
-- Receiver: `receive.js` captures camera frames (scaled to at most 1920 px on the long edge) and passes RGBA pixels to `receive-worker.js`, which calls `rx_push` in wasm
+- Receiver: `receive.js` captures camera frames (scaled to at most 1920 px on the long edge) and passes RGBA pixels to `receive-worker.js`, which calls `rx_push` in wasm. `rx_frame_corners` gives the corners of the sender frame the capture read (quiet zone included, in capture pixels), and `spark-worker.js` draws electric arcs around it in the preview and a time-jump flash on completion, on an OffscreenCanvas so the capture loop keeps the main thread; with reduced motion it draws a still outline instead
 - Sender: `send-worker.js` reads the key QR (`tx_scan`), prepares the session (`tx_start`), and renders each frame (`tx_frame`, one pixel per cell); `send.js` draws it into a 2D Canvas, scaled per §6.5
 - `web/build.sh` builds the wasm to `web/pkg/beamlet.wasm`. The Service Worker (`sw.js`) caches the pages and the wasm for offline use
 - Web security

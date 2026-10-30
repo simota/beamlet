@@ -18,6 +18,7 @@ const SHELL = [
   'send-worker.js',
   'receive.js',
   'receive-worker.js',
+  'spark-worker.js',
   'pkg/beamlet.wasm',
   'manifest.webmanifest',
   'favicon.ico',

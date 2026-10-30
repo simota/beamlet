@@ -13,7 +13,7 @@ use crate::detect;
 use crate::frame;
 use crate::handshake::{self, Caps, HandshakeError};
 use crate::header::{self, Header};
-use crate::layout::Layout;
+use crate::layout::{Layout, QUIET};
 use crate::manifest::{self, Entry};
 use crate::params::{self, Params};
 use crate::prng::SplitMix64;
@@ -618,6 +618,16 @@ impl Receiver {
         }
     }
 
+    /// Corners of the frame the last capture read, quiet zone included, in
+    /// capture pixels: its grid's top left, top right, bottom right and
+    /// bottom left. None when the last capture did not read. The receive
+    /// page draws around the sender's frame with them.
+    pub fn frame_corners(&self) -> Option<[(f64, f64); 4]> {
+        let (i, grid) = self.tracked.as_ref()?;
+        let (w, h, q) = (self.candidates[*i].0.w as f64, self.candidates[*i].0.h as f64, QUIET as f64);
+        Some([(-q, -q), (w + q, -q), (w + q, h + q), (-q, h + q)].map(|(x, y)| grid.project(x, y)))
+    }
+
     /// Whether the sender should draw its fallback alone
     /// (`Sender::set_fallback_only`): at least a quarter of the last
     /// ADVICE_WINDOW captures that read were drawn in a mode that has a
@@ -757,6 +767,25 @@ mod tests {
         let again = receiver.push(&capture);
         assert!(again.synced && again.tiles_ok == first.tiles_ok);
         assert_eq!(again.symbols_new, 0);
+    }
+
+    #[test]
+    fn frame_corners_follow_the_sender_frame_in_the_capture() {
+        let mut rng = SplitMix64::new(4);
+        let mut receiver = Receiver::new([7; 32]);
+        let mut sender = Sender::new(&receiver.key_qr(caps()), [8; 32], files(&mut rng), Params::mode("standard").unwrap(), 3).unwrap();
+        // capture_at pastes the frame, quiet zone included, at 6 px per cell.
+        let (fw, fh) = (6.0 * (192 + 2 * QUIET) as f64, 6.0 * (108 + 2 * QUIET) as f64);
+        for (dx, dy) in [(200, 100), (203, 102), (500, 300)] {
+            assert!(receiver.push(&capture_at(&mut sender, dx, dy)).synced);
+            let corners = receiver.frame_corners().expect("the capture read");
+            let (x, y) = (dx as f64, dy as f64);
+            for (got, want) in corners.iter().zip([(x, y), (x + fw, y), (x + fw, y + fh), (x, y + fh)]) {
+                assert!((got.0 - want.0).abs() < 2.0 && (got.1 - want.1).abs() < 2.0, "corner {got:?}, want {want:?}");
+            }
+        }
+        receiver.push(&Rgb { w: 640, h: 360, px: vec![96; 640 * 360 * 3] });
+        assert_eq!(receiver.frame_corners(), None, "a capture that does not read has no frame");
     }
 
     #[test]

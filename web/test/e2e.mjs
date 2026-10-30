@@ -89,6 +89,12 @@ function transfer(files, limit, onFrame = () => {}) {
     putInput(cap.data);
     const r = w.rx_push(cap.width, cap.height);
     assert.ok((r >> 25) & 1, `frame ${shown} not synced`);
+    // The receive page draws round the sender frame at these corners.
+    const corners = new Float32Array(output(w.rx_frame_corners()).buffer);
+    assert.equal(corners.length, 8);
+    for (let i = 0; i < 8; i += 2) {
+      assert.ok(corners[i] > -2 && corners[i] < cap.width + 2 && corners[i + 1] > -2 && corners[i + 1] < cap.height + 2, `frame ${shown}: corner in the capture`);
+    }
     const fresh = w.rx_symbols_new();
     assert.ok(fresh <= (r & 0xfff), 'new symbols never exceed tiles read');
     symbols += fresh;
