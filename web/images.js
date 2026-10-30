@@ -10,8 +10,11 @@ export const IMAGE_LEVELS = {
   standard: { longEdge: 1280, quality: 0.7 },
   light: { longEdge: 800, quality: 0.6 },
 };
-const THUMB_LONG_EDGE = 160;
-const THUMB_QUALITY = 0.6;
+// The thumbnail rides in the manifest, which is repeated through the whole
+// transfer, so every byte here is paid many times over: it only has to be
+// recognisable, and the receiver scales it up.
+const THUMB_LONG_EDGE = 80;
+const THUMB_QUALITY = 0.4;
 
 async function encode(bitmap, longEdge, type, quality) {
   const scale = Math.min(1, longEdge / Math.max(bitmap.width, bitmap.height));

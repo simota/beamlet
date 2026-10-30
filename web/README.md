@@ -29,7 +29,7 @@ The compact-mode stream mixes in black-and-white stable-mode frames, so cameras 
 
 Frames on the sending screen are drawn to fill the screen's width or height. On a portrait screen they are rotated 90° to run along the long side, and a cell is not rounded down even when it does not fit a whole number of pixels (docs/STREAM_FORMAT.md §6.5).
 
-Images can be compressed at one of three levels — 「高画質」 "High" (2048 px on the long side), 「標準」 "Standard" (1280 px) or 「軽量」 "Light" (800 px) — re-encoded as WebP, or JPEG if WebP is unavailable (re-encoding removes location and other metadata), or sent as 「原寸」 "Original size". The file list shows each file's size before and after. Either way, a 160 px thumbnail goes into the manifest, so the receiver shows a preview before the full image arrives. Formats the browser cannot read (such as HEIC outside Safari) are sent as is.
+Images can be compressed at one of three levels — 「高画質」 "High" (2048 px on the long side), 「標準」 "Standard" (1280 px) or 「軽量」 "Light" (800 px) — re-encoded as WebP, or JPEG if WebP is unavailable (re-encoding removes location and other metadata), or sent as 「原寸」 "Original size". The file list shows each file's size before and after. Either way, an 80 px thumbnail (about 1.5–2 KB) goes into the manifest, so the receiver shows a preview before the full image arrives. Formats the browser cannot read (such as HEIC outside Safari) are sent as is.
 
 The receiver's analysis runs in a Web Worker (receive-worker.js). From the second frame on, it tracks the previous position (the receive screen shows 「追跡」 "Tracking"). The sender also reads the key QR, prepares the transfer, and generates frames in a Worker (send-worker.js). One transfer is limited to 100 MB in total.
 

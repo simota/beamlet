@@ -286,6 +286,9 @@ ul.note { padding-left: 1.2em; }
 .file a { font-weight: 700; }
 img { display: block; max-width: 100%; max-height: 200px; margin: 6px 0 0; }
 img.preview {
+  /* An 80 px thumbnail, scaled up to a recognisable size. */
+  height: 120px;
+  width: auto;
   opacity: 0.7;
   mask: repeating-linear-gradient(0deg, #000 0 2px, rgba(0, 0, 0, 0.35) 2px 4px);
   -webkit-mask: repeating-linear-gradient(0deg, #000 0 2px, rgba(0, 0, 0, 0.35) 2px 4px);

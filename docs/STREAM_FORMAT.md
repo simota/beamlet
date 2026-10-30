@@ -56,7 +56,7 @@ Consequences of this approach:
 
 | OID | Contents |
 |---|---|
-| 0 | **Manifest**. Per file, `{oid, size, sha256, name, mime, thumbnail}`. The thumbnail is a JPEG with a 160px long edge (quality 0.6), present only for images the browser can decode. The format is a custom length-prefixed binary (`beamlet-stream/src/manifest.rs`) |
+| 0 | **Manifest**. Per file, `{oid, size, sha256, name, mime, thumbnail}`. The thumbnail is a JPEG with an 80px long edge (quality 0.4, about 1.5–2 KB) kept small because the manifest is repeated throughout the transfer, present only for images the browser can decode. The format is a custom length-prefixed binary (`beamlet-stream/src/manifest.rs`) |
 | 1–255 | File bodies |
 
 - The receiver shows the file list and thumbnails once OID 0 is complete. Each file body replaces its thumbnail as it arrives
