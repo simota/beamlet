@@ -39,7 +39,11 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET' || new URL(request.url).origin !== location.origin) return;
-  event.respondWith(fetch(request).then((response) => {
+  // Revalidated rather than taken from the browser's HTTP cache (GitHub
+  // Pages sends max-age=600): otherwise a visit after a deploy could mix
+  // files from two deploys, such as an old receive-worker.js with new
+  // pages and wasm.
+  event.respondWith(fetch(request, { cache: 'no-cache' }).then((response) => {
     if (response.ok) {
       const copy = response.clone();
       event.waitUntil(caches.open(CACHE).then((cache) => cache.put(request, copy)));
