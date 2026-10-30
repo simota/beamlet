@@ -306,6 +306,9 @@ pub struct Progress {
     pub synced: bool,
     pub tiles_ok: usize,
     pub tiles_total: usize,
+    /// Symbols this capture added that were not already held: the measure
+    /// of how fast a transfer advances, unlike tiles read.
+    pub symbols_new: usize,
     /// Located by following the previous capture rather than a full search.
     pub tracked: bool,
 }
@@ -441,7 +444,7 @@ impl Receiver {
         }
         for packet in tiles.into_iter().flatten() {
             progress.tiles_ok += 1;
-            self.absorb(packet, h.symbol_size);
+            progress.symbols_new += self.absorb(packet, h.symbol_size) as usize;
         }
         true
     }
@@ -460,10 +463,11 @@ impl Receiver {
             && self.key.as_ref().is_none_or(|(_, pk_e)| *pk_e == h.pk_e)
     }
 
-    fn absorb(&mut self, p: TilePacket, t: u16) {
+    /// True if the packet carried a symbol not already held.
+    fn absorb(&mut self, p: TilePacket, t: u16) -> bool {
         let count = self.object_count.unwrap_or(0);
         if (p.oid > count) || p.transfer_len == 0 || p.transfer_len > MAX_OBJECT {
-            return;
+            return false;
         }
         let container = {
             let entry = self.incoming.entry(p.oid).or_insert_with(|| {
@@ -475,12 +479,12 @@ impl Receiver {
                     needed: p.transfer_len.div_ceil(oti.symbol_size() as u64) as usize,
                 }
             });
-            let Incoming::Receiving { decoder, oti, seen, .. } = entry else { return };
+            let Incoming::Receiving { decoder, oti, seen, .. } = entry else { return false };
             if p.transfer_len != oti.transfer_length() || p.sbn >= oti.source_blocks() || !seen.insert((p.sbn, p.esi)) {
-                return;
+                return false;
             }
             let symbol = p.symbol[..t as usize].to_vec();
-            let Some(container) = decoder.decode(EncodingPacket::new(PayloadId::new(p.sbn, p.esi), symbol)) else { return };
+            let Some(container) = decoder.decode(EncodingPacket::new(PayloadId::new(p.sbn, p.esi), symbol)) else { return true };
             container
         };
         let (key, pk_e) = self.key.as_ref().expect("tiles are only absorbed after the key is derived");
@@ -508,6 +512,7 @@ impl Receiver {
             };
             self.incoming.insert(p.oid, state);
         }
+        true
     }
 
     /// The only place a received file is hashed: once, against its manifest entry.
@@ -652,6 +657,19 @@ mod tests {
             px[o..o + frame.w * 3].copy_from_slice(&frame.px[y * frame.w * 3..(y + 1) * frame.w * 3]);
         }
         Rgb { w: 1920, h: 1080, px }
+    }
+
+    #[test]
+    fn a_repeated_capture_adds_no_new_symbols() {
+        let mut rng = SplitMix64::new(6);
+        let mut receiver = Receiver::new([7; 32]);
+        let mut sender = Sender::new(&receiver.key_qr(caps()), [8; 32], files(&mut rng), Params::mode("standard").unwrap(), 3).unwrap();
+        let capture = capture_at(&mut sender, 200, 100);
+        let first = receiver.push(&capture);
+        assert!(first.synced && first.symbols_new > 0 && first.symbols_new <= first.tiles_ok);
+        let again = receiver.push(&capture);
+        assert!(again.synced && again.tiles_ok == first.tiles_ok);
+        assert_eq!(again.symbols_new, 0);
     }
 
     #[test]

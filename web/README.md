@@ -52,6 +52,7 @@ Analysis runs synchronously on the main thread. The browser drops camera frames 
 |---|---|---|---|---|
 | Node 22 (V8), Mac | 27 ms | 40 ms | 50 ms | lab: pixel-aligned image pasted at 1920×1080, including verification against the ground truth |
 | Node 22 (V8), Mac, `rx_push` | 10.5 ms | | | Receive session, 1280×720, tracking |
+| Node 22 (V8), Mac, `rx_push` | 13.9 ms | | | Receive session, 1920×1080, tracking; copying the capture into wasm adds 0.2 ms |
 | Chrome (extension debugger attached), Mac, Worker | 64 ms | | | Receive session, 1280×720, tracking. wasm optimizations may be disabled under the debugger, so this is not a normal browser figure |
 
-Browser and phone figures have not been measured yet.
+Browser and phone figures have not been measured yet. While receiving, `receive.html` shows the average time per stage (capture grab, copy into wasm, analysis), the processed fps, and new symbols per second. Making analysis faster only shortens a transfer when the processed fps is below the sender's display fps (15 for standard and compact).

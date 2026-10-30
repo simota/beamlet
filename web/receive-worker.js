@@ -21,10 +21,14 @@ self.onmessage = ({ data: msg }) => {
       break;
     }
     case 'frame': {
+      // Copying into wasm memory and analysing are timed apart, so the
+      // page can tell which stage limits the frame rate.
       const t0 = performance.now();
       putInput(new Uint8Array(msg.buffer));
+      const t1 = performance.now();
       const r = wasm.rx_push(msg.width, msg.height);
-      const ms = performance.now() - t0;
+      const copyMs = t1 - t0, analyzeMs = performance.now() - t1;
+      const symbolsNew = wasm.rx_symbols_new();
       const status = JSON.parse(text(output(wasm.rx_status())));
       // Each verified file is sent once, its buffer transferred.
       const files = [];
@@ -48,7 +52,9 @@ self.onmessage = ({ data: msg }) => {
           detected: Boolean((r >> 24) & 1),
           synced: Boolean((r >> 25) & 1),
           tracked: Boolean((r >> 26) & 1),
-          ms,
+          copyMs,
+          analyzeMs,
+          symbolsNew,
           status,
           files,
           thumbs,

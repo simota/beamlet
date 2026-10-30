@@ -19,6 +19,8 @@ struct App {
     rgb: Vec<u8>,
     out: Vec<u8>,
     receiver: Option<Receiver>,
+    /// New symbols from the last `rx_push`; the packed result has no room.
+    symbols_new: u32,
     key_qr: Option<String>,
     /// The scanned receiver's camera, which `tx_mode` fits to this screen.
     caps: Option<Caps>,
@@ -116,12 +118,19 @@ pub extern "C" fn rx_push(w: u32, h: u32) -> u32 {
         let img = input_rgb(app, w, h);
         let p = app.receiver.as_mut().expect("rx_new first").push(&img);
         app.rgb = img.px;
+        app.symbols_new = p.symbols_new as u32;
         p.tiles_ok as u32
             | (p.tiles_total as u32) << 12
             | (p.detected as u32) << 24
             | (p.synced as u32) << 25
             | (p.tracked as u32) << 26
     })
+}
+
+/// Symbols the last `rx_push` added that were not already held.
+#[no_mangle]
+pub extern "C" fn rx_symbols_new() -> u32 {
+    with(|app| app.symbols_new)
 }
 
 /// Session state as JSON: {"complete":bool,"files":[{oid,name,mime,size,state,received,needed}]|null}.

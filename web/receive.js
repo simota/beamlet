@@ -129,12 +129,18 @@ async function startCamera() {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   let running = true, busy = false, decoded = 0;
+  // Per-stage time summed over this camera run, and symbols that advanced
+  // the transfer: which stage limits the rate, and how fast data arrives.
+  let grabMs = 0, copyMs = 0, analyzeMs = 0, symbols = 0;
   const started = performance.now();
   const next = (cb) => (video.requestVideoFrameCallback ? video.requestVideoFrameCallback(cb) : requestAnimationFrame(cb));
 
   worker.onmessage = ({ data: r }) => {
     busy = false;
     decoded++;
+    copyMs += r.copyMs;
+    analyzeMs += r.analyzeMs;
+    symbols += r.symbolsNew;
     for (const t of r.thumbs) previews.set(t.oid, URL.createObjectURL(new Blob([t.data], { type: 'image/jpeg' })));
     for (const f of r.files) {
       const meta = r.status.files.find((x) => x.oid === f.oid);
@@ -152,9 +158,11 @@ async function startCamera() {
     }
     $('step-receive').dataset.state = r.status.complete ? 'done' : r.synced ? 'synced' : r.detected ? 'foreign' : 'searching';
     showPhase(r, now - started);
-    $('status').textContent = r.synced
-      ? `${r.ok}/${r.total} タイル、解析 ${r.ms.toFixed(0)} ms${r.tracked ? '（追跡）' : ''}、${rate.toFixed(1)} fps`
-      : `カメラ ${canvas.width}×${canvas.height}、${rate.toFixed(1)} fps`;
+    const avg = (ms) => (ms / decoded).toFixed(1);
+    $('status').textContent =
+      `${r.synced ? `${r.ok}/${r.total} タイル${r.tracked ? '（追跡）' : ''}、` : ''}カメラ ${canvas.width}×${canvas.height}、` +
+      `処理 ${rate.toFixed(1)} fps（取得 ${avg(grabMs)}・コピー ${avg(copyMs)}・解析 ${avg(analyzeMs)} ms）、` +
+      `新規 ${((symbols * 1000) / (now - started)).toFixed(0)} シンボル/秒`;
     if (r.status.complete) {
       stop?.();
       $('stop').hidden = true;
@@ -172,8 +180,10 @@ async function startCamera() {
         canvas.width = cw;
         canvas.height = ch;
       }
+      const t0 = performance.now();
       ctx.drawImage(video, 0, 0, cw, ch);
       const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      grabMs += performance.now() - t0;
       busy = true;
       worker.postMessage({ type: 'frame', buffer: data.buffer, width, height }, [data.buffer]);
     }

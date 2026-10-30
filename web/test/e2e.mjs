@@ -79,7 +79,7 @@ function rotate90(src, w, h) {
 // Stream frames into the receiver, dropping a quarter of them and showing
 // every third one rotated.
 const fw = w.tx_frame_width(), fh = w.tx_frame_height();
-let shown = 0, status;
+let shown = 0, status, symbols = 0;
 for (; shown < 200; shown++) {
   const frame = output(w.tx_frame());
   if (shown % 4 === 3) continue;
@@ -87,10 +87,14 @@ for (; shown < 200; shown++) {
   putInput(cap.data);
   const r = w.rx_push(cap.width, cap.height);
   assert.ok((r >> 25) & 1, `frame ${shown} not synced`);
+  const fresh = w.rx_symbols_new();
+  assert.ok(fresh <= (r & 0xfff), 'new symbols never exceed tiles read');
+  symbols += fresh;
   status = JSON.parse(new TextDecoder().decode(output(w.rx_status())));
   if (status.complete) break;
 }
 assert.ok(status.complete, 'transfer completes');
+assert.ok(symbols > 0, 'new symbols are counted');
 for (const [i, f] of files.entries()) {
   const entry = status.files[i];
   assert.equal(entry.name, f.name);
