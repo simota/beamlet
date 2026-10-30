@@ -1,0 +1,6 @@
+/target
+/tools/bos-lab/out
+/web/pkg
+.DS_Store
+/.claude/
+/.nanika/

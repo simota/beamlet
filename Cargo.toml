@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = ["beamlet-stream"]
+
+# Detection and simulation run per-pixel loops over full 1080p frames;
+# unoptimised builds make tests and the lab tool take minutes.
+[profile.dev]
+opt-level = 2
+
+[profile.test]
+opt-level = 3
+
+[profile.release]
+lto = true
