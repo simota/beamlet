@@ -35,9 +35,20 @@ self.onmessage = ({ data: msg }) => {
       const rc = wasm.tx_start(msg.mode, crypto.getRandomValues(new Uint32Array(1))[0]);
       self.postMessage(
         rc === 0
-          ? { type: 'started', rc, fingerprint: text(output(wasm.tx_fingerprint())), width: wasm.tx_frame_width(), height: wasm.tx_frame_height() }
+          ? {
+              type: 'started',
+              rc,
+              fingerprint: text(output(wasm.tx_fingerprint())),
+              width: wasm.tx_frame_width(),
+              height: wasm.tx_frame_height(),
+              fallback: wasm.tx_fallback_only(msg.fallbackOnly ? 1 : 0) === 1,
+            }
           : { type: 'started', rc },
       );
+      break;
+    }
+    case 'fallbackOnly': {
+      self.postMessage({ type: 'fallbackOnly', fallback: wasm.tx_fallback_only(msg.on ? 1 : 0) === 1 });
       break;
     }
     case 'frame': {

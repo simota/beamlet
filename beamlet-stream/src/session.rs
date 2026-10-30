@@ -157,6 +157,8 @@ pub struct Sender {
     /// that cannot tell this mode's colours apart (compact → stable).
     fallback: Option<(Params, Layout, Vec<[u8; 3]>)>,
     palette: Vec<[u8; 3]>,
+    /// Every frame is drawn in the fallback mode (`set_fallback_only`).
+    fallback_only: bool,
     header: Header,
     manifest: ObjectStream,
     /// Manifest tiles per frame once its early passes are out (§4.2).
@@ -231,6 +233,7 @@ impl Sender {
             params,
             layout,
             fallback,
+            fallback_only: false,
             header,
             manifest,
             manifest_late,
@@ -253,15 +256,27 @@ impl Sender {
         &self.params
     }
 
-    /// Whether the next frame is drawn in the fallback mode: one run of
-    /// FALLBACK_RUN frames in FALLBACK_FIRST during the first pass, one in
-    /// FALLBACK_LATER after it. Runs are picked by a hash of their number
-    /// rather than in turn, so a camera that drops every second or fourth
-    /// frame loses no more of the fallback frames than of the rest.
+    /// Draw every frame from the next one on in the fallback mode, or go
+    /// back to mixing it in, for a camera that cannot read this mode's
+    /// colours (§6.6). The session goes on as it is — same key, same
+    /// symbols — so the receiver keeps everything it already has, which a
+    /// new session in another mode would throw away. False if this mode has
+    /// no fallback, in which case nothing changes.
+    pub fn set_fallback_only(&mut self, on: bool) -> bool {
+        self.fallback_only = on;
+        self.fallback.is_some()
+    }
+
+    /// Whether the next frame is drawn in the fallback mode: every frame
+    /// under `set_fallback_only`, otherwise one run of FALLBACK_RUN frames
+    /// in FALLBACK_FIRST during the first pass and one in FALLBACK_LATER
+    /// after it. Runs are picked by a hash of their number rather than in
+    /// turn, so a camera that drops every second or fourth frame loses no
+    /// more of the fallback frames than of the rest.
     fn draws_fallback(&self) -> bool {
         let every = if self.passes == 0 { FALLBACK_FIRST } else { FALLBACK_LATER };
         let run = u64::from(self.header.frame_no / FALLBACK_RUN);
-        self.fallback.is_some() && SplitMix64::new(run).next_u64().is_multiple_of(every)
+        self.fallback.is_some() && (self.fallback_only || SplitMix64::new(run).next_u64().is_multiple_of(every))
     }
 
     /// The manifest's share of each tile of a frame of `tiles` tiles, in
@@ -827,6 +842,49 @@ mod tests {
                 assert!(shown.is_some(), "{mode}, {late} frames later: no file list within {limit} frames");
             }
         }
+    }
+
+    #[test]
+    fn the_fallback_only_switch_keeps_the_session_and_its_symbols() {
+        let mut rng = SplitMix64::new(8);
+        let mut receiver = Receiver::new([9; 32]);
+        let qr = receiver.key_qr(caps());
+        assert!(!Sender::new(&qr, [4; 32], vec![], Params::mode("standard").unwrap(), 1).unwrap().set_fallback_only(true), "standard has no fallback");
+        let mut sender = Sender::new(&qr, [4; 32], files(&mut rng), Params::mode("compact").unwrap(), 1).unwrap();
+        let mut held = 0;
+        for _ in 0..20 {
+            let p = receiver.push(&next_compact_frame(&mut sender).0);
+            assert!(p.synced);
+            held += p.symbols_new;
+        }
+        assert!(held > 0);
+        assert!(sender.set_fallback_only(true));
+        for _ in 0..600 {
+            let (img, fallback) = next_compact_frame(&mut sender);
+            assert!(fallback, "every frame is drawn in stable after the switch");
+            let p = receiver.push(&img);
+            assert!(p.synced, "the receiver takes the same session on");
+            if receiver.complete() {
+                return;
+            }
+        }
+        panic!("transfer did not complete after the switch");
+    }
+
+    #[test]
+    fn a_camera_that_cannot_read_compact_completes_sooner_on_stable_frames_alone() {
+        let start = || {
+            let mut rng = SplitMix64::new(8);
+            let receiver = Receiver::new([9; 32]);
+            let sender = Sender::new(&receiver.key_qr(caps()), [4; 32], files(&mut rng), Params::mode("compact").unwrap(), 1).unwrap();
+            (sender, receiver)
+        };
+        let (mut sender, mut receiver) = start();
+        let mixed = shown_to_a_monochrome_camera(&mut sender, &mut receiver, 2000).expect("the mixed stream completes");
+        let (mut sender, mut receiver) = start();
+        sender.set_fallback_only(true);
+        let alone = shown_to_a_monochrome_camera(&mut sender, &mut receiver, 2000).expect("stable frames alone complete");
+        assert!(alone < mixed, "{alone} frames of stable alone against {mixed} mixed");
     }
 
     /// Next compact-stream frame and whether it was drawn in the fallback mode.

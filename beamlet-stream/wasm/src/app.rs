@@ -292,6 +292,15 @@ pub extern "C" fn tx_start(mode: u32, filler: u32) -> i32 {
     })
 }
 
+/// Draw every frame from the next one on in the mode's black-and-white
+/// fallback (1) or go back to mixing it in (0), within the same session
+/// so the receiver keeps what it has. 1 if the mode has a fallback
+/// (compact), 0 if not and nothing changes.
+#[no_mangle]
+pub extern "C" fn tx_fallback_only(on: u32) -> u32 {
+    with(|app| app.sender.as_mut().expect("tx_start first").set_fallback_only(on != 0) as u32)
+}
+
 #[no_mangle]
 pub extern "C" fn tx_fingerprint() -> *const u8 {
     with(|app| {

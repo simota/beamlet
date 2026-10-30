@@ -47,6 +47,10 @@ $('files').onchange = () => {
 };
 $('images').onchange = () => prepare();
 $('mode').onchange = () => prepare();
+// Unlike the inputs above, this switch keeps the prepared session: the
+// receiver goes on with the same key and keeps what it has received.
+// #TODO(agent): UNVERIFIED — exercise this switch on the real send page (it needs a scanned key QR); only the wasm path is covered, by web/test/e2e.mjs.
+$('stable-only').onchange = () => call({ type: 'fallbackOnly', on: $('stable-only').checked });
 
 let stopScan = null;
 function endScan(message) {
@@ -107,6 +111,7 @@ async function prepare() {
   updateSteps();
   $('send').disabled = true;
   $('fp-line').hidden = true;
+  $('stable-line').hidden = true;
   if (!$('files').files.length || !scanned) {
     $('prepared').replaceChildren();
     const hasFiles = $('files').files.length > 0;
@@ -135,7 +140,7 @@ async function prepare() {
     $('send-status').textContent = `合計 ${(total / 1048576).toFixed(1)} MB は上限の 100 MB を超えています。ファイルを減らしてください。`;
     return;
   }
-  const r = await call({ type: 'start', files, mode: Number($('mode').value) }, files.flatMap((f) => [f.data, f.thumb]));
+  const r = await call({ type: 'start', files, mode: Number($('mode').value), fallbackOnly: $('stable-only').checked }, files.flatMap((f) => [f.data, f.thumb]));
   if (gen !== generation) return;
   if (r.rc !== 0) {
     scanned = false;
@@ -146,6 +151,7 @@ async function prepare() {
   frameSize = [r.width, r.height];
   $('fingerprint').textContent = r.fingerprint;
   $('fp-line').hidden = false;
+  $('stable-line').hidden = !r.fallback;
   $('send-status').textContent = `送るデータは合計 ${(total / 1024).toFixed(1)} KB です。`;
   $('send').disabled = false;
   $('send').focus();
@@ -213,7 +219,8 @@ $('send').onclick = async () => {
     document.fullscreenElement && document.exitFullscreen();
     $('stage').hidden = true;
     $('setup').hidden = false;
-    $('send-status').textContent = `${displayed} フレーム表示しました。受信側で完了していなければ、もう一度「送信を始める」を押してください。`;
+    const stableHint = !$('stable-line').hidden && !$('stable-only').checked ? '受信側の進みが止まっていたら、「安定だけで送る」をオンにしてから押してください。' : '';
+    $('send-status').textContent = `${displayed} フレーム表示しました。受信側で完了していなければ、もう一度「送信を始める」を押してください。${stableHint}`;
     $('send').focus();
   };
 };

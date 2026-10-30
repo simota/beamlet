@@ -37,6 +37,10 @@
     <p class="fingerprint" id="fp-line" hidden>確認番号 <strong id="fingerprint"></strong> — 受信側と同じなら送信を始めてください</p>
     <button id="send" disabled>送信を始める</button>
     <p id="send-status" class="status" aria-live="polite">ファイルを選び、受信側の QR コードを読むと準備が始まります。</p>
+    <div id="stable-line" hidden>
+      <label><input type="checkbox" id="stable-only"> 安定だけで送る</label>
+      <p class="note">受信側の進みが止まったときに使います。送信を止めてここをオンにし、もう一度「送信を始める」を押すと、白黒のフレームだけを送ります。受信済みのデータはそのまま使われます。</p>
+    </div>
     <details class="advanced">
       <summary>詳細設定</summary>
       <label>モード <select id="mode"></select></label>
