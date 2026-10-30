@@ -82,7 +82,7 @@ Tiles in each frame:  allocate 1/10 to OID 0 (streamed continuously)
 
 | Mode | Processing | Use |
 |---|---|---|
-| Share (default) | Downscale to at most a 2048px long edge and re-encode as WebP (JPEG where the browser cannot encode WebP) at quality 0.8. **Re-encoding drops EXIF and all other metadata, location included**. Images the browser cannot decode (such as HEIC outside Safari) are sent as is | Everyday sharing |
+| High (default) / Standard / Light | Downscale to at most a 2048 / 1280 / 800px long edge and re-encode as WebP (JPEG where the browser cannot encode WebP) at quality 0.8 / 0.7 / 0.6. **Re-encoding drops EXIF and all other metadata, location included**. Images the browser cannot decode (such as HEIC outside Safari) are sent as is | Everyday sharing; the lighter levels shorten the transfer |
 | Original | Send the original byte sequence as is. Metadata is kept, and the sender notes that location and other metadata will be sent | When the original data is needed |
 
 - Files whose MIME type is already compressed are not deflated: `image/*`, `video/*`, `audio/*`, and types matching zip, gzip, compressed, x-7z, x-rar, or pdf. Everything else is deflated. The choice is recorded per object in the container's flag byte (§8). The manifest is always deflated

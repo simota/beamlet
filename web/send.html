@@ -17,7 +17,9 @@
     <h2>1. ファイルを選ぶ</h2>
     <div class="picker"><input id="files" class="visually-hidden" type="file" multiple><label for="files" class="button">ファイルを選択</label> <span id="chosen" class="note">未選択</span></div>
     <label>画像 <select id="images">
-      <option value="share">共有用（縮小して位置情報を削除）</option>
+      <option value="high">高画質（長辺 2048px）</option>
+      <option value="standard">標準（長辺 1280px）</option>
+      <option value="light">軽量（長辺 800px）</option>
       <option value="original">原寸（そのまま送る）</option>
     </select></label>
     <ul id="prepared" class="note"></ul>

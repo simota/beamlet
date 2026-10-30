@@ -1,5 +1,5 @@
 import { MODES, captureFrames, fitFrame, openCamera } from './beamlet.js';
-import { prepareFile } from './images.js';
+import { IMAGE_LEVELS, prepareFile } from './images.js';
 
 // The sender's wasm runs in send-worker.js so that scanning and preparing
 // large files never block this thread. Replies come back in request order,
@@ -101,6 +101,7 @@ const compressible = (mime) => !/^(image|video|audio)\//.test(mime) && !/zip|gzi
 // takes a generation number; a run overtaken by a newer one discards its
 // result, so the screen always reflects the latest inputs.
 let generation = 0;
+const bytes = (n) => (n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 async function prepare() {
   const gen = ++generation;
   updateSteps();
@@ -117,16 +118,16 @@ async function prepare() {
     return;
   }
   $('send-status').textContent = '準備しています…';
-  const shareable = $('images').value === 'share';
+  const level = IMAGE_LEVELS[$('images').value] ?? null;
   const files = [], lines = [];
   let total = 0;
   for (const file of $('files').files) {
-    const f = await prepareFile(file, shareable);
+    const f = await prepareFile(file, level);
     if (gen !== generation) return;
     files.push({ name: f.name, mime: f.mime, data: f.data.buffer, thumb: f.thumb.buffer, compress: compressible(f.mime) });
     total += f.data.length;
     const li = document.createElement('li');
-    li.textContent = `${f.name}: ${(f.data.length / 1024).toFixed(1)} KB（元 ${(file.size / 1024).toFixed(1)} KB）${f.note ? ` — ${f.note}` : ''}`;
+    li.textContent = `${f.name}: ${bytes(file.size)} → ${bytes(f.data.length)}${f.note ? ` — ${f.note}` : ''}`;
     lines.push(li);
   }
   $('prepared').replaceChildren(...lines);
