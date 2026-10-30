@@ -289,6 +289,9 @@ img.preview {
   /* An 80 px thumbnail, scaled up to a recognisable size. */
   height: 120px;
   width: auto;
+  /* A wide preview is clamped by max-width; keep its proportions. */
+  object-fit: contain;
+  object-position: left;
   opacity: 0.7;
   mask: repeating-linear-gradient(0deg, #000 0 2px, rgba(0, 0, 0, 0.35) 2px 4px);
   -webkit-mask: repeating-linear-gradient(0deg, #000 0 2px, rgba(0, 0, 0, 0.35) 2px 4px);

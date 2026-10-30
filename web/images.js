@@ -18,7 +18,9 @@ const THUMB_QUALITY = 0.4;
 
 async function encode(bitmap, longEdge, type, quality) {
   const scale = Math.min(1, longEdge / Math.max(bitmap.width, bitmap.height));
-  const canvas = new OffscreenCanvas(Math.round(bitmap.width * scale), Math.round(bitmap.height * scale));
+  // At least 1 px a side: a very thin image would otherwise round to zero,
+  // and a zero-sized canvas cannot be encoded.
+  const canvas = new OffscreenCanvas(Math.max(1, Math.round(bitmap.width * scale)), Math.max(1, Math.round(bitmap.height * scale)));
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
