@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; media-src blob: mediastream:">
+<title>Beamlet — 送信</title>
+<link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#05070d">
+<link rel="stylesheet" href="style.css">
+<script type="module" src="pwa.js"></script>
+<header class="topbar"><a class="brand" href="index.html">← <img class="mark" src="apple-touch-icon.png" alt="" width="18" height="18">BEAMLET</a></header>
+<main id="setup">
+  <h1>送信</h1>
+  <section class="step" id="step-files">
+    <h2>1. ファイルを選ぶ</h2>
+    <div class="picker"><input id="files" class="visually-hidden" type="file" multiple><label for="files" class="button">ファイルを選択</label> <span id="chosen" class="note">未選択</span></div>
+    <label>画像 <select id="images">
+      <option value="share">共有用（縮小して位置情報を削除）</option>
+      <option value="original">原寸（そのまま送る）</option>
+    </select></label>
+    <ul id="prepared" class="note"></ul>
+  </section>
+  <section class="step" id="step-scan">
+    <h2>2. 受信側の QR コードを読む</h2>
+    <label>カメラ <select id="facing"><option value="environment">背面</option><option value="user">前面</option></select></label>
+    <button id="scan">読み取る</button>
+    <button id="cancel-scan" hidden>やめる</button>
+    <video id="video" playsinline muted hidden></video>
+    <p id="scan-status" class="status" aria-live="polite"></p>
+  </section>
+  <section class="step" id="step-send">
+    <h2>3. 確認して送信</h2>
+    <p class="fingerprint" id="fp-line" hidden>確認番号 <strong id="fingerprint"></strong> — 受信側と同じなら送信を始めてください</p>
+    <button id="send" disabled>送信を始める</button>
+    <p id="send-status" class="status" aria-live="polite">ファイルを選び、受信側の QR コードを読むと準備が始まります。</p>
+    <details class="advanced">
+      <summary>詳細設定</summary>
+      <label>モード <select id="mode"></select></label>
+      <label>表示の大きさ <select id="size">
+        <option value="1">大（画面いっぱい）</option>
+        <option value="0.6">中</option>
+        <option value="0.35">小</option>
+      </select></label>
+      <p class="note">モードは受信側に合わせて自動で選びます。受信側のカメラに収まらないときは表示を小さくしてください。小さく表示して近くから撮るのは、大きく表示して離れて撮るのと同じです。</p>
+    </details>
+  </section>
+</main>
+<div id="stage" hidden><canvas id="frame"></canvas><p id="hint">受信側に「すべて受信しました」と出たらタップして終了</p></div>
+<script type="module" src="send.js"></script>
+</html>

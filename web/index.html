@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'">
+<title>Beamlet</title>
+<link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#05070d">
+<link rel="stylesheet" href="style.css">
+<script type="module" src="pwa.js"></script>
+<main class="landing">
+  <header class="hero">
+    <img class="mark" src="apple-touch-icon.png" alt="" width="72" height="72">
+    <h1 class="logo" data-text="BEAMLET">BEAMLET</h1>
+    <p class="tagline">画面とカメラだけで、端末どうしで暗号化したファイルを受け渡します。ネットワークは使いません。</p>
+  </header>
+  <nav class="tiles">
+    <a class="tile" href="receive.html"><span class="code">RX // 01</span><strong>受信する</strong><span>先に受信側で開きます</span></a>
+    <a class="tile" href="send.html"><span class="code">TX // 02</span><strong>送信する</strong><span>受信側の QR コードを読んで送ります</span></a>
+  </nav>
+</main>
+</html>

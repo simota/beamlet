@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Beamlet lab — browser receive</title>
+<style>
+  body { font: 14px system-ui, sans-serif; margin: 12px; }
+  fieldset { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; border: 1px solid #ccc; }
+  input[type=number] { width: 6em; }
+  #view { width: 100%; max-width: 640px; background: #222; display: block; margin: 8px 0; }
+  #live { font: 13px ui-monospace, monospace; }
+  pre { background: #f4f4f4; padding: 8px; overflow-x: auto; }
+</style>
+<h1>Beamlet lab — browser receive</h1>
+<p>Decodes BOS1 lab frames in WebAssembly. Match the stream parameters to the
+<code>bos-lab render</code> manifest shown by the player on the other screen.</p>
+<fieldset>
+  <label>mode <select id="mode">
+    <option>stable</option><option>compact</option><option selected>standard</option><option>fast</option><option>fastest</option>
+  </select></label>
+  <label>seed <input id="seed" type="number" value="1"></label>
+  <label>frames <input id="frames" type="number" value="120"></label>
+  <label>camera fps <input id="fps" type="number" value="60"></label>
+  <button id="synthetic">synthetic benchmark</button>
+  <button id="camera">start camera</button>
+</fieldset>
+<div id="live"></div>
+<canvas id="view"></canvas>
+<video id="video" playsinline muted hidden></video>
+<pre id="out"></pre>
+<script type="module" src="lab.js"></script>

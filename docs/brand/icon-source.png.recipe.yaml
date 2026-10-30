@@ -1,0 +1,21 @@
+engine: codex exec --enable image_generation
+model: unreported
+prompt: |
+  Generate one square app icon image with your image generation tool, square 1024x1024, then reply with the absolute path of the saved file.
+  Subject: the app "Beamlet" sends files from one screen to a camera by light. Motif: a beam of light travelling into a camera viewfinder.
+  Style: flat, bold geometric vector-like shapes, high contrast, neon glow kept subtle; must stay recognisable when shrunk to 16x16 pixels.
+  Colours: solid background #05070d filling the whole canvas edge to edge (no rounded-corner mask, no transparency); main colour cyan #3ef2ff; one accent in magenta #ff3ec8. No other hues.
+  Composition: subject centred, about 70% of the canvas, generous even margin.
+  Exclude: any text, letters, numbers, logos, watermark, photorealism, 3D bevel, fine detail, thin hairlines, gradient noise.
+  Variant: four cyan corner brackets forming a square viewfinder; a single thick magenta-to-cyan beam enters from the left edge and ends in a bright dot at the centre.
+  End by printing only the absolute path of the generated PNG file.
+excluded: text, letters, numbers, logos, watermark, photorealism, 3D bevel, fine detail,
+  thin hairlines, gradient noise
+size:
+  asked: 1024x1024
+  on_disk: 1254x1254
+inputs: []
+output:
+  generated: (codex image_generation output)
+  placed: docs/brand/icon-source.png
+note: IRREPRODUCIBLE — exact regeneration not established; this file is the artifact
