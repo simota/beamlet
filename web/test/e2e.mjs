@@ -38,14 +38,18 @@ function camera(src, sw, sh, scale, rgba) {
 function pair() {
   putInput(random(32));
   w.rx_new();
-  const modules = output(w.rx_key_qr(30, 0b011, 192));
+  scan(output(w.rx_key_qr(30, 0b011, 192)));
+  return new TextDecoder().decode(output(w.rx_fingerprint()));
+}
+
+/// The sender scans the key code with QR module matrix `modules`.
+function scan(modules) {
   const side = Math.sqrt(modules.length);
   const qr = new Uint8Array((side + 8) ** 2);
   for (let y = 0; y < side; y++) for (let x = 0; x < side; x++) qr[(y + 4) * (side + 8) + x + 4] = modules[y * side + x];
   const shot = camera(qr, side + 8, side + 8, 8, false);
   putInput(shot.data);
   assert.equal(w.tx_scan(shot.width, shot.height), 2, 'a browser receiver (30 fps, ≤2 bpc, 192 cells) takes standard mode');
-  return new TextDecoder().decode(output(w.rx_fingerprint()));
 }
 
 /// Hand `files` to the sender and start it in `mode`.
@@ -153,3 +157,35 @@ const shown = transfer(files, 1000, (frame, shown) => {
   }
 });
 assert.ok(shown > SWITCH_AT, 'the transfer went on past the switch');
+
+// The receive page's worker (receive-worker.js), driven as receive.js
+// drives it, on its own wasm instance: what the page gets back per frame.
+const replies = [];
+globalThis.self = globalThis;
+globalThis.postMessage = (msg) => replies.push(msg);
+globalThis.fetch = async (url) => new Response(await readFile(new URL(`../${url}`, import.meta.url)), { headers: { 'content-type': 'application/wasm' } });
+await import('../receive-worker.js');
+assert.equal(replies.shift().type, 'ready');
+self.onmessage({ data: { type: 'init', caps: { fps: 30, bpcMask: 0b011, maxCells: 192 } } });
+const key = replies.shift();
+scan(key.modules);
+start(files, w.tx_mode(0), key.fingerprint);
+{
+  const fw = w.tx_frame_width(), fh = w.tx_frame_height(), got = new Map();
+  let r;
+  for (let shown = 0; shown < 200 && !r?.status.complete; shown++) {
+    const cap = camera(output(w.tx_frame()), fw, fh, 5, true);
+    self.onmessage({ data: { type: 'frame', buffer: cap.data.buffer, width: cap.width, height: cap.height } });
+    r = replies.shift();
+    assert.equal(r.type, 'result');
+    assert.ok(r.synced, `worker frame ${shown} not synced`);
+    // The frame sits 40 px in from the capture's corners (camera()).
+    const want = [40, 40, cap.width - 40, 40, cap.width - 40, cap.height - 40, 40, cap.height - 40];
+    assert.equal(r.corners?.length, 8, `worker frame ${shown}: four corners`);
+    r.corners.forEach((v, i) => assert.ok(Math.abs(v - want[i]) < 2, `worker frame ${shown}: corner ${r.corners} against ${want}`));
+    for (const f of r.files) got.set(f.oid, f.data);
+  }
+  assert.ok(r.status.complete, 'the worker completes the transfer');
+  for (const [i, f] of files.entries()) assert.deepEqual(got.get(r.status.files[i].oid), f.data);
+  console.log('ok: receive-worker.js reports the frame corners and delivers both files');
+}

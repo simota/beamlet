@@ -11,6 +11,8 @@ export function putInput(bytes) {
   new Uint8Array(wasm.memory.buffer, ptr, bytes.length).set(bytes);
 }
 
+// Exports that return bytes all write one output buffer: read each result
+// before calling the next such export.
 export function output(ptr) {
   return new Uint8Array(wasm.memory.buffer, ptr, wasm.app_out_len()).slice();
 }
