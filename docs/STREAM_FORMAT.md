@@ -317,6 +317,7 @@ web/                        # static PWA: send.html, receive.html, lab.html, Wor
 - Ideal rates are from `bos-lab layout` (1 KB = 1024 B). They exclude the RaptorQ overhead, the tiles spent on the manifest (§4.2), and the wait for cycling through the objects and back
 - The actual limit is set by the receiver's analysis speed (whether one frame can be processed within the capture period), the camera's resolution and fps, the color classification error rate, and the sender's display fps
 - Analysis time in wasm on V8 (Node 22, Mac): 27 ms in Standard, 40 ms in Fast, and 50 ms in Fastest for a 1920×1080 capture, including ground-truth comparison (`lab.html`); a receive session (`rx_push`) takes 10.8–10.9 ms per capture when run alone (around 18 ms when run alongside other measurements), including the reference color re-measurement
+- `rx_push` while tracking, Node 22 on a Mac, synthetic capture with no blur (`camera()` as in `web/test/e2e.mjs`): Fast at 1928×1144 takes 12.6 ms (median; 23.6 ms before the coarse marker search sampled cell centres only), Standard at 1880×1124 takes 8.4 ms (18.7 ms before). Fast's 60 captures per second fit on this machine; phones have not been measured
 
 End-to-end simulation (wasm sender connected directly to the wasm receiver; 1/4 of displayed frames dropped, 1/3 captured rotated 90°; sending a 300 KB Share image and 16 KB of text), time from the start of display to completion:
 

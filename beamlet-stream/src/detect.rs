@@ -121,7 +121,7 @@ pub fn fit(m: &Markers, layout: &Layout) -> Option<Grid> {
         })
         .filter_map(|(points, module)| Homography::from_points(cells, points).map(|hg| (hg, module)))
         .map(|(hg, module)| {
-            let fit: f64 = (0..4).map(|k| template_contrast(gray, &hg, cells[k], 3, PATTERNS[k], (0.0, 0.0))).sum();
+            let fit: f64 = (0..4).map(|k| template_contrast(gray, &hg, cells[k], 3, PATTERNS[k], (0.0, 0.0), 5)).sum();
             (fit, hg, module)
         })
         .max_by(|a, b| a.0.total_cmp(&b.0))?;
@@ -359,15 +359,24 @@ fn finder_trios(clusters: &[Cluster]) -> Vec<(Point, Point, Point, f64)> {
 }
 
 /// Mean luma of the template's light cells minus that of its dark cells,
-/// with the template shifted by `offset` image pixels. Five samples per
-/// cell, spread over its middle: a shift is penalised as soon as samples
-/// cross a cell edge, which keeps the peak narrow.
-fn template_contrast(g: &Gray, h: &Homography, centre: Point, half: i32, dark: fn(i32, i32) -> bool, offset: Point) -> f64 {
+/// with the template shifted by `offset` image pixels. Up to five samples
+/// per cell (`spread`), spread over its middle: a shift is penalised as
+/// soon as samples cross a cell edge, which keeps the peak narrow. The
+/// centre sample alone is enough to find the peak to within a pixel.
+fn template_contrast(
+    g: &Gray,
+    h: &Homography,
+    centre: Point,
+    half: i32,
+    dark: fn(i32, i32) -> bool,
+    offset: Point,
+    spread: usize,
+) -> f64 {
     const SPREAD: [(f64, f64); 5] = [(0.0, 0.0), (0.3, 0.0), (-0.3, 0.0), (0.0, 0.3), (0.0, -0.3)];
     let (mut light, mut darks, mut nl, mut nd) = (0.0, 0.0, 0, 0);
     for dy in -half..=half {
         for dx in -half..=half {
-            for (sx, sy) in SPREAD {
+            for &(sx, sy) in &SPREAD[..spread] {
                 let (x, y) = h.apply(centre.0 + dx as f64 + sx, centre.1 + dy as f64 + sy);
                 let v = g.sample(x + offset.0, y + offset.1);
                 if dark(dx, dy) {
@@ -398,12 +407,12 @@ fn refine(
     start: Point,
     search: f64,
 ) -> (Point, f64) {
-    let contrast = |ox: f64, oy: f64| template_contrast(g, h, centre, half, dark, (ox, oy));
+    let contrast = |o: Point, spread: usize| template_contrast(g, h, centre, half, dark, o, spread);
     // On a sharp, pixel-aligned image the contrast is flat over a range of
     // shifts; taking the first maximum biases toward the search origin's
     // corner, so the centroid of the top plateau is used instead.
-    let plateau = |offsets: Vec<Point>| -> (Point, f64) {
-        let scored: Vec<(Point, f64)> = offsets.into_iter().map(|o| (o, contrast(o.0, o.1))).collect();
+    let plateau = |offsets: Vec<Point>, spread: usize| -> (Point, f64) {
+        let scored: Vec<(Point, f64)> = offsets.into_iter().map(|o| (o, contrast(o, spread))).collect();
         let top = scored.iter().map(|s| s.1).fold(f64::MIN, f64::max);
         let near: Vec<Point> = scored.iter().filter(|s| s.1 >= top - 0.5).map(|s| s.0).collect();
         let n = near.len() as f64;
@@ -413,9 +422,9 @@ fn refine(
     let grid = |c: Point, n: i32, step: f64| -> Vec<Point> {
         (-n..=n).flat_map(|oy| (-n..=n).map(move |ox| (c.0 + ox as f64 * step, c.1 + oy as f64 * step))).collect()
     };
-    let (coarse, _) = plateau(grid(start, steps, 1.0));
-    let (fine, _) = plateau(grid(coarse, 4, 0.25));
-    (fine, contrast(fine.0, fine.1))
+    let (coarse, _) = plateau(grid(start, steps, 1.0), 1);
+    let (fine, _) = plateau(grid(coarse, 4, 0.25), 5);
+    (fine, contrast(fine, 5))
 }
 
 fn dist(a: Point, b: Point) -> f64 {

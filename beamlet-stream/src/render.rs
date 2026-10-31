@@ -14,18 +14,15 @@ impl Rgb {
         let (x, y) = (x - 0.5, y - 0.5);
         let (x0, y0) = (x.floor(), y.floor());
         let (fx, fy) = (x - x0, y - y0);
-        let at = |xi: f64, yi: f64, c: usize| {
-            let xi = (xi as i64).clamp(0, self.w as i64 - 1) as usize;
-            let yi = (yi as i64).clamp(0, self.h as i64 - 1) as usize;
-            self.px[(yi * self.w + xi) * 3 + c] as f64
-        };
-        let mut out = [0.0; 3];
-        for (c, o) in out.iter_mut().enumerate() {
-            let top = at(x0, y0, c) * (1.0 - fx) + at(x0 + 1.0, y0, c) * fx;
-            let bot = at(x0, y0 + 1.0, c) * (1.0 - fx) + at(x0 + 1.0, y0 + 1.0, c) * fx;
-            *o = top * (1.0 - fy) + bot * fy;
-        }
-        out
+        let col = |xi: f64| (xi as i64).clamp(0, self.w as i64 - 1) as usize;
+        let row = |yi: f64| (yi as i64).clamp(0, self.h as i64 - 1) as usize * self.w;
+        let (c0, c1, r0, r1) = (col(x0), col(x0 + 1.0), row(y0), row(y0 + 1.0));
+        let at = |r: usize, c: usize, k: usize| self.px[(r + c) * 3 + k] as f64;
+        std::array::from_fn(|k| {
+            let top = at(r0, c0, k) * (1.0 - fx) + at(r0, c1, k) * fx;
+            let bot = at(r1, c0, k) * (1.0 - fx) + at(r1, c1, k) * fx;
+            top * (1.0 - fy) + bot * fy
+        })
     }
 }
 
