@@ -34,7 +34,7 @@
       "start_time": "0.000000",
       "duration_ts": 583680,
       "duration": "38.000000",
-      "bit_rate": "1929604",
+      "bit_rate": "1909163",
       "bits_per_raw_sample": "8",
       "nb_frames": "1140",
       "extradata_size": 52,
@@ -119,7 +119,7 @@
     }
   ],
   "format": {
-    "filename": "1080p_30fps_crf28.mp4",
+    "filename": "final-promo.mp4",
     "nb_streams": 2,
     "nb_programs": 0,
     "nb_stream_groups": 0,
@@ -127,8 +127,8 @@
     "format_long_name": "QuickTime / MOV",
     "start_time": "0.000000",
     "duration": "38.000000",
-    "size": "9850641",
-    "bit_rate": "2073819",
+    "size": "9753499",
+    "bit_rate": "2053368",
     "probe_score": 100,
     "tags": {
       "major_brand": "isom",

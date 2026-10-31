@@ -407,7 +407,7 @@ export const Scene5Architecture: React.FC = () => {
                       }}
                     >
                       <span>MODES: 安定 · 小画面 · 標準 · 高速 · 最速</span>
-                      <span style={{ color: COLORS.ok, fontWeight: 700 }}>RaptorQ 噴水符号 ・ 最大 100 MB 対応</span>
+                      <span style={{ color: COLORS.ok, fontWeight: 700 }}>RaptorQ 噴水符号 ・ 約5分で最大 10 MB</span>
                     </div>
                   </>
                 )}

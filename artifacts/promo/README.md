@@ -8,14 +8,14 @@ The promotional video for Beamlet (an optical-stream Web / PWA app that transfer
   </a>
 </video>
 
-> Full HD video with audio (MP4, 9.4 MiB, about 81% smaller than the 48.6 MiB master): [final-promo.mp4](final-promo.mp4)
+> Full HD video with audio (MP4, 9.3 MiB, about 81% smaller than the 49.2 MiB master): [final-promo.mp4](final-promo.mp4)
 
 ## Contents
 
 | Path | Contents |
 |---|---|
-| `final-promo.mp4` | Compressed promotional video (1920×1080 Full HD / 30fps / H.264 High `yuv420p` Rec.709 `bt709` + AAC 48kHz stereo / 38.0 s / 9.4 MiB) |
-| `previews/promo-preview.webp` | Lightweight animated WebP for inline autoplay in the GitHub README (864×486 / 10fps / 4.7 MiB) |
+| `final-promo.mp4` | Compressed promotional video (1920×1080 Full HD / 30fps / H.264 High `yuv420p` Rec.709 `bt709` + AAC 48kHz stereo / 38.0 s / 9.3 MiB) |
+| `previews/promo-preview.webp` | Lightweight animated WebP for inline autoplay in the GitHub README (864×486 / 10fps / 4.9 MiB) |
 | `storyboard.md` | Art direction and the storyboard for all 7 scenes |
 | `source/` | Full production source (Remotion 4 / React / TypeScript + frame generation from the real `beamlet.wasm` + real-UI capture with Playwright + audio synthesis and compression with Python/FFmpeg) |
 | `assets/` | Real `BOS1` frames, public-key QR, real-UI screenshots, generated backdrop and sample photo (with `.recipe.yaml`), and the mastered soundtrack used in the video |

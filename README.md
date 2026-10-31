@@ -13,7 +13,7 @@ Move multiple files (about five minutes' worth: some 3.5 MB from a phone, 10 MB 
   </a>
 </video>
 
-> Full HD video with audio (MP4, 9.4 MiB): [artifacts/promo/final-promo.mp4](artifacts/promo/final-promo.mp4)
+> Full HD video with audio (MP4, 9.3 MiB): [artifacts/promo/final-promo.mp4](artifacts/promo/final-promo.mp4)
 
 ## How it works (BOS1: Beamlet Optical Stream v1)
 
