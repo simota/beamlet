@@ -628,6 +628,13 @@ impl Receiver {
         Some([(-q, -q), (w + q, -q), (w + q, h + q), (-q, h + q)].map(|(x, y)| grid.project(x, y)))
     }
 
+    /// Bits per cell of the frame the last capture read, or None when it
+    /// did not read. The receive page measures from it whether this camera
+    /// reads 3-bit colours (§5 caps).
+    pub fn frame_bpc(&self) -> Option<u32> {
+        self.tracked.as_ref().map(|(i, _)| self.candidates[*i].0.bpc)
+    }
+
     /// Whether the sender should draw its fallback alone
     /// (`Sender::set_fallback_only`): at least a quarter of the last
     /// ADVICE_WINDOW captures that read were drawn in a mode that has a

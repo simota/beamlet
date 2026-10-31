@@ -1,7 +1,7 @@
 # BOS1 (Beamlet Optical Stream) — An optical stream format for sending data with a screen and a camera
 
 - Names: the app is **Beamlet**; the optical stream format is **BOS1** (Beamlet Optical Stream v1). The identifier is `BOS1`, the frame magic is `"BL"`, and the Rust crate is `beamlet-stream`
-- Target: the Web / PWA (`web/`), which both sends and receives. The browser receiver advertises up to Standard mode (§5, §6.6)
+- Target: the Web / PWA (`web/`), which both sends and receives. The browser receiver advertises up to Standard mode, and Fast once its earlier runs have measured that it can take it (§5, §6.6)
 
 ## 1. Overview
 
@@ -109,7 +109,8 @@ show fingerprint FP as 6 digits                    generate (skE, pkE) and show 
   - `fps`: the camera's effective fps (1B)
   - `bpc_mask`: the numbers of bits per cell the receiver can handle (1B; bit0 = 1bit, bit1 = 2bit, bit2 = 3bit)
   - `max_cells`: the maximum number of cells along the long edge the receiver can handle (2B, big-endian)
-  - The browser receiver sends `fps = 30`, `bpc_mask = 0b011`, `max_cells = 192`
+  - The browser receiver sends what its earlier receive runs on the same browser measured (`receiverCaps` and `measure` in `web/beamlet.js`, kept in `localStorage`). With nothing measured it sends `fps = 30`, `bpc_mask = 0b011`, `max_cells = 192`
+  - `fps` is the capture rate the last run of at least 5 s analysed (never below 30). 3 bit and `max_cells = 256` are added once a run read at least 30 captures of 3-bit frames and at least 80% of their tiles (Fast mode's 20% tile-loss budget, §11), and removed when a later run reads fewer. The camera is opened only after the key QR is shown, so a run measures for the next key QR, not its own
 - Secrets are generated from 32 random bytes supplied by the page (`crypto.getRandomValues`)
 - The receiver does not know the grid size until it reads the header. It locates markers once per capture, fits each distinct grid of the §6.6 modes (trying the most recently successful mode first), and uses whichever yields a header of its own session. For modes that share a grid, such as Stable and Compact, the markers and header band are in the same positions, so a single sampling pass is calibrated with each mode's palette strips, and the mode is decided by the bpc and `rs_level` of the header that was read (§6.6)
 - A header is accepted only if its `session_id` is this receiver's, its grid, bpc, and `rs_level` match the layout it was read with, its `symbol_size` is a nonzero multiple of 8 that fits the tile, and, once a key has been derived, its `pkE` matches
@@ -218,7 +219,7 @@ The fastest mode whose requirements are met is chosen automatically from the rec
 | Fast | 256 × 144 | 3 | 1 (25%) | 30 | Receiver at 60 fps with 3 bit, `max_cells` ≥ 256 | 48 | 8496 B |
 | Fastest (experimental) | 320 × 180 | 2 | 1 (25%) | 60 | Receiver at 120 fps with 2 bit, `max_cells` ≥ 320 | 51 | 9027 B |
 
-Payload per frame is tiles × T from the actual layout (`bos-lab layout`). With the browser receiver's `caps` (§5), the fastest mode is Standard.
+Payload per frame is tiles × T from the actual layout (`bos-lab layout`). With the browser receiver's `caps` (§5), the fastest mode is Standard until earlier runs have measured Fast, which then needs 60 analysed captures per second. Fast can always be picked by hand on the send page to make that first measurement.
 
 - Fastest mode uses bpc 2 rather than 3 because 120 fps capture has short exposure times, which is expected to increase noise
 

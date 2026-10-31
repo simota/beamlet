@@ -147,7 +147,8 @@ pub extern "C" fn rx_frame_corners() -> *const u8 {
     })
 }
 
-/// Session state as JSON: {"complete":bool,"fallback_advised":bool,"files":[{oid,name,mime,size,state,received,needed}]|null}.
+/// Session state as JSON: {"complete":bool,"fallback_advised":bool,"bpc":n|null,"files":[{oid,name,mime,size,state,received,needed}]|null}.
+/// `bpc`: bits per cell of the frame the last capture read (`Receiver::frame_bpc`).
 /// `fallback_advised`: the camera cannot read the sender's colours, which
 /// should switch to 「安定だけで送る」 (`Receiver::fallback_advised`).
 #[no_mangle]
@@ -175,9 +176,10 @@ pub extern "C" fn rx_status() -> *const u8 {
             format!("[{}]", items.join(","))
         });
         let json = format!(
-            r#"{{"complete":{},"fallback_advised":{},"files":{}}}"#,
+            r#"{{"complete":{},"fallback_advised":{},"bpc":{},"files":{}}}"#,
             rx.complete(),
             rx.fallback_advised(),
+            rx.frame_bpc().map_or("null".to_string(), |b| b.to_string()),
             files.as_deref().unwrap_or("null")
         );
         emit(app, json.into_bytes())

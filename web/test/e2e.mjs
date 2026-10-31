@@ -6,6 +6,7 @@
 
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
+import { measure, receiverCaps } from '../beamlet.js';
 
 const bytes = await readFile(new URL('../pkg/beamlet.wasm', import.meta.url));
 const { instance } = await WebAssembly.instantiate(bytes, {});
@@ -42,14 +43,19 @@ function pair() {
   return new TextDecoder().decode(output(w.rx_fingerprint()));
 }
 
-/// The sender scans the key code with QR module matrix `modules`.
-function scan(modules) {
+/// The sender scans the key code with QR module matrix `modules`;
+/// returns the mode index it chose.
+function scanMode(modules) {
   const side = Math.sqrt(modules.length);
   const qr = new Uint8Array((side + 8) ** 2);
   for (let y = 0; y < side; y++) for (let x = 0; x < side; x++) qr[(y + 4) * (side + 8) + x + 4] = modules[y * side + x];
   const shot = camera(qr, side + 8, side + 8, 8, false);
   putInput(shot.data);
-  assert.equal(w.tx_scan(shot.width, shot.height), 2, 'a browser receiver (30 fps, ≤2 bpc, 192 cells) takes standard mode');
+  return w.tx_scan(shot.width, shot.height);
+}
+
+function scan(modules) {
+  assert.equal(scanMode(modules), 2, 'a browser receiver (30 fps, ≤2 bpc, 192 cells) takes standard mode');
 }
 
 /// Hand `files` to the sender and start it in `mode`.
@@ -188,4 +194,35 @@ start(files, w.tx_mode(0), key.fingerprint);
   assert.ok(r.status.complete, 'the worker completes the transfer');
   for (const [i, f] of files.entries()) assert.deepEqual(got.get(r.status.files[i].oid), f.data);
   console.log('ok: receive-worker.js reports the frame corners and delivers both files');
+}
+
+// Measured caps (receive.js): nothing measured offers what pair() offers;
+// a run too short, or with too few 3-bit captures, settles nothing; one
+// that kept 60 fps and read fast mode's colours makes the next key code
+// take fast mode, whose frames the receiver reports as 3-bit.
+{
+  assert.deepEqual(receiverCaps({}), { fps: 30, bpcMask: 0b011, maxCells: 192 });
+  assert.deepEqual(measure({ fps: 70, bpc3: true }, { ms: 4000, captures: 400, bpc3Captures: 10, ok: 0, total: 480 }), { fps: 70, bpc3: true });
+  const kept = measure({}, { ms: 10000, captures: 655, bpc3Captures: 300, ok: 12000, total: 14400 });
+  assert.deepEqual(kept, { fps: 65, bpc3: true });
+  assert.deepEqual(measure(kept, { ms: 10000, captures: 400, bpc3Captures: 300, ok: 11000, total: 14400 }), { fps: 40, bpc3: false }, 'a worse run takes fast mode back');
+  const caps = receiverCaps(kept);
+  assert.deepEqual(caps, { fps: 65, bpcMask: 0b111, maxCells: 256 });
+
+  putInput(random(32));
+  w.rx_new();
+  assert.equal(scanMode(output(w.rx_key_qr(caps.fps, caps.bpcMask, caps.maxCells))), 3, 'measured caps take fast mode');
+  const rxFp = new TextDecoder().decode(output(w.rx_fingerprint()));
+  start(files, 3, rxFp);
+  const fw = w.tx_frame_width(), fh = w.tx_frame_height();
+  let status;
+  for (let shown = 0; shown < 200 && !status?.complete; shown++) {
+    const cap = camera(output(w.tx_frame()), fw, fh, 5, true);
+    putInput(cap.data);
+    assert.ok((w.rx_push(cap.width, cap.height) >> 25) & 1, `fast frame ${shown} not synced`);
+    status = JSON.parse(new TextDecoder().decode(output(w.rx_status())));
+    assert.equal(status.bpc, 3, `fast frame ${shown} is reported as 3-bit`);
+  }
+  assert.ok(status.complete, 'the fast transfer completes');
+  console.log('ok: measured caps take fast mode, read as 3-bit frames');
 }

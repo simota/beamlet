@@ -1,8 +1,9 @@
-import { drawModules, openCamera } from './beamlet.js';
+import { drawModules, measure, openCamera, receiverCaps } from './beamlet.js';
 
-// What a browser receiver can take (STREAM_FORMAT.md §5 caps): ~30 fps
-// capture, up to 2 bits per cell, grids up to the standard mode's width.
-const CAPS = { fps: 30, bpcMask: 0b011, maxCells: 192 };
+// What this browser's earlier receive runs measured; the key code offers
+// the caps they support (receiverCaps).
+const MEASURED = 'beamlet.receiver-measured';
+const measured = () => JSON.parse(localStorage.getItem(MEASURED) ?? '{}');
 const $ = (id) => document.getElementById(id);
 
 const worker = new Worker('receive-worker.js', { type: 'module' });
@@ -178,6 +179,8 @@ async function startCamera() {
   // Per-stage time summed over this camera run, and symbols that advanced
   // the transfer: which stage limits the rate, and how fast data arrives.
   let grabMs = 0, copyMs = 0, analyzeMs = 0, symbols = 0;
+  // Captures that read a 3-bit frame, and their tiles read and shown.
+  let bpc3Captures = 0, bpc3Ok = 0, bpc3Total = 0;
   const started = performance.now();
   const next = (cb) => (video.requestVideoFrameCallback ? video.requestVideoFrameCallback(cb) : requestAnimationFrame(cb));
 
@@ -201,6 +204,11 @@ async function startCamera() {
     if (r.synced) {
       tiles += r.ok;
       everSynced = true;
+      if (r.status.bpc === 3) {
+        bpc3Captures++;
+        bpc3Ok += r.ok;
+        bpc3Total += r.total;
+      }
     }
     $('step-receive').dataset.state = r.status.complete ? 'done' : r.synced ? 'synced' : r.detected ? 'foreign' : 'searching';
     showPhase(r, now - started);
@@ -241,6 +249,9 @@ async function startCamera() {
   stop = () => {
     running = false;
     stream.getTracks().forEach((t) => t.stop());
+    // #TODO(agent): UNVERIFIED — on a real camera, check that a run sent in hand-picked fast mode stores bpc3 and the next key code takes fast.
+    const run = { ms: performance.now() - started, captures: decoded, bpc3Captures, ok: bpc3Ok, total: bpc3Total };
+    localStorage.setItem(MEASURED, JSON.stringify(measure(measured(), run)));
     stop = null;
   };
   $('stop').textContent = '受信をやめる';
@@ -253,7 +264,7 @@ worker.onerror = () => {
 
 worker.onmessage = ({ data: msg }) => {
   if (msg.type === 'ready') {
-    worker.postMessage({ type: 'init', caps: CAPS });
+    worker.postMessage({ type: 'init', caps: receiverCaps(measured()) });
   } else if (msg.type === 'key') {
     // Fit the code inside the panel: its content box less the plate's padding.
     const panel = $('step-key');

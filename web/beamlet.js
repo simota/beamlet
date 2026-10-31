@@ -1,5 +1,5 @@
 // Shared helpers for the Beamlet pages that do not need the wasm module:
-// camera capture and pixel-exact drawing.
+// receiver caps, camera capture and pixel-exact drawing.
 
 export const MODES = [
   { name: 'stable', label: '安定', fps: 10 },
@@ -8,6 +8,40 @@ export const MODES = [
   { name: 'fast', label: '高速', fps: 30 },
   { name: 'fastest', label: '最速', fps: 60 },
 ];
+
+/// What a browser receiver can take (STREAM_FORMAT.md §5 caps), from what
+/// its earlier receive runs measured (`measure`). With nothing measured:
+/// ~30 fps capture, up to 2 bits per cell, grids up to the standard mode's
+/// width. Fast mode's 3-bit colours and 256-cell grid are offered only
+/// once a run has read them.
+export function receiverCaps(measured) {
+  return {
+    fps: Math.max(30, measured.fps ?? 0),
+    bpcMask: measured.bpc3 ? 0b111 : 0b011,
+    maxCells: measured.bpc3 ? 256 : 192,
+  };
+}
+
+// A run shorter than this says nothing about the rate the receiver keeps.
+const MIN_RUN_MS = 5000;
+// 3-bit captures that read, about a second at 30 fps, before a run judges
+// the camera's colours either way.
+const MIN_BPC3_CAPTURES = 30;
+// Share of 3-bit tiles a run must read: fast mode's 20% tile-loss budget
+// (STREAM_FORMAT.md §11).
+const BPC3_READ = 0.8;
+
+/// `measured` updated with one receive run: `ms` long, `captures` analysed,
+/// and the tiles read (`ok`) and shown (`total`) over its `bpc3Captures`
+/// captures that read a 3-bit frame. The latest run replaces what an
+/// earlier one measured, so a camera that reads worse than it did loses
+/// the faster mode on the next key code.
+export function measure(measured, { ms, captures, bpc3Captures, ok, total }) {
+  const next = { ...measured };
+  if (ms >= MIN_RUN_MS) next.fps = Math.floor((captures * 1000) / ms);
+  if (bpc3Captures >= MIN_BPC3_CAPTURES) next.bpc3 = ok >= BPC3_READ * total;
+  return next;
+}
 
 export function openCamera(facingMode, fps) {
   return navigator.mediaDevices.getUserMedia({
