@@ -38,7 +38,7 @@ Consequences of this approach:
 ## 3. Scope
 
 **In scope**
-- One-to-one, one-way transfer. Multiple files can be sent in one session (total limit 100 MB; 20 MB or less recommended)
+- One-to-one, one-way transfer. Multiple files can be sent in one session, up to what the chosen mode sends in about 5 minutes at the 20% tile loss of §11 (`sendLimit` in `web/beamlet.js`): about 0.8 MB in Stable, 3.5 MB in Compact, 9.7 MB in Standard, 58 MB in Fast, and never more than 64 MB. The send page shows the expected time before sending
 - Image conversion and delivering thumbnails ahead of the files (§4)
 - Automatic mode selection according to the receiver's capabilities, and manual switching (§6.6)
 - Offering each received file for saving as soon as it is complete and verified
@@ -260,7 +260,7 @@ container_o = chunk_{o,0} || chunk_{o,1} || ... || chunk_{o,n}
 - The key is used only once per session. Each `(o, i)` pair is unique within a session, so nonces never repeat
 - Because of the `last` flag, truncating the end causes verification to fail
 - File names, MIME types, and the manifest's contents are all inside the encryption
-- Decryption and inflation stop at a size limit (100 MiB + 1 MiB for a file, 4 MiB for the manifest); exceeding it fails the object
+- Decryption and inflation stop at a size limit (64 MiB + 1 MiB for a file, 4 MiB for the manifest); exceeding it fails the object
 
 ## 9. Implementation structure
 

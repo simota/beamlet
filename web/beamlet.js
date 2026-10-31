@@ -1,13 +1,32 @@
 // Shared helpers for the Beamlet pages that do not need the wasm module:
 // receiver caps, camera capture and pixel-exact drawing.
 
+// `payload`: bytes a frame carries with every tile read (`bos-lab
+// layout`, STREAM_FORMAT.md §6.6).
 export const MODES = [
-  { name: 'stable', label: '安定', fps: 10 },
-  { name: 'compact', label: '小画面', fps: 15 },
-  { name: 'standard', label: '標準', fps: 15 },
-  { name: 'fast', label: '高速', fps: 30 },
-  { name: 'fastest', label: '最速', fps: 60 },
+  { name: 'stable', label: '安定', fps: 10, payload: 342 },
+  { name: 'compact', label: '小画面', fps: 15, payload: 1026 },
+  { name: 'standard', label: '標準', fps: 15, payload: 2832 },
+  { name: 'fast', label: '高速', fps: 30, payload: 8496 },
+  { name: 'fastest', label: '最速', fps: 60, payload: 9027 },
 ];
+
+// Share of tiles a capture is assumed to lose (STREAM_FORMAT.md §11).
+const TILE_LOSS = 0.2;
+// How long one transfer may take: about as long as a person keeps a
+// camera on a screen.
+export const SEND_SECONDS = 300;
+// Largest total the receiver takes: it drops any object over
+// session.rs MAX_OBJECT, which is this plus room for the container.
+const MAX_TOTAL = 64 * 1024 * 1024;
+
+/// Bytes per second `mode` carries at the §11 tile loss, before the
+/// RaptorQ repair overhead and the manifest.
+export const modeRate = (mode) => mode.payload * mode.fps * (1 - TILE_LOSS);
+
+/// The most one transfer in `mode` may carry: what it sends in
+/// SEND_SECONDS, and no more than the receiver takes.
+export const sendLimit = (mode) => Math.min(MAX_TOTAL, Math.floor(modeRate(mode) * SEND_SECONDS));
 
 /// What a browser receiver can take (STREAM_FORMAT.md §5 caps), from what
 /// its earlier receive runs measured (`measure`). With nothing measured:

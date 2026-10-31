@@ -22,7 +22,7 @@ use crate::sample::{self, Classifier, Metric};
 use crate::tile::{self, TilePacket};
 
 /// Largest object either side accepts (STREAM_FORMAT.md §3), plus container overhead.
-pub const MAX_OBJECT: u64 = 100 * 1024 * 1024 + 1024 * 1024;
+pub const MAX_OBJECT: u64 = 64 * 1024 * 1024 + 1024 * 1024;
 const MAX_MANIFEST: usize = 4 * 1024 * 1024;
 /// One tile in this many carries the manifest during its first
 /// MANIFEST_EARLY_PASSES passes, which a receiver watching from the start

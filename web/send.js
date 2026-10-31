@@ -1,4 +1,4 @@
-import { MODES, captureFrames, fitFrame, openCamera } from './beamlet.js';
+import { MODES, SEND_SECONDS, captureFrames, fitFrame, modeRate, openCamera, sendLimit } from './beamlet.js';
 import { IMAGE_LEVELS, prepareFile } from './images.js';
 
 // The sender's wasm runs in send-worker.js so that scanning and preparing
@@ -20,9 +20,6 @@ async function call(msg, transfer = []) {
   });
 }
 
-// Total per transfer (STREAM_FORMAT.md §3); the receiver drops objects
-// larger than this, so a bigger send could never complete.
-const MAX_TOTAL = 100 * 1024 * 1024;
 let frameSize = [0, 0];
 
 const $ = (id) => document.getElementById(id);
@@ -136,8 +133,11 @@ async function prepare() {
     lines.push(li);
   }
   $('prepared').replaceChildren(...lines);
-  if (total > MAX_TOTAL) {
-    $('send-status').textContent = `合計 ${(total / 1048576).toFixed(1)} MB は上限の 100 MB を超えています。ファイルを減らしてください。`;
+  // Per transfer, by how long the chosen mode takes (STREAM_FORMAT.md §3).
+  const mode = MODES[Number($('mode').value)];
+  if (total > sendLimit(mode)) {
+    $('send-status').textContent =
+      `合計 ${bytes(total)} は「${mode.label}」で約 ${SEND_SECONDS / 60} 分に送れる上限 ${bytes(sendLimit(mode))} を超えています。ファイルを減らしてください。`;
     return;
   }
   const r = await call({ type: 'start', files, mode: Number($('mode').value), fallbackOnly: $('stable-only').checked }, files.flatMap((f) => [f.data, f.thumb]));
@@ -152,7 +152,8 @@ async function prepare() {
   $('fingerprint').textContent = r.fingerprint;
   $('fp-line').hidden = false;
   $('stable-line').hidden = !r.fallback;
-  $('send-status').textContent = `送るデータは合計 ${(total / 1024).toFixed(1)} KB です。`;
+  $('send-status').textContent =
+    `送るデータは合計 ${bytes(total)}、「${mode.label}」で約 ${Math.ceil(total / modeRate(mode) / 60)} 分かかる見込みです。`;
   $('send').disabled = false;
   $('send').focus();
 }

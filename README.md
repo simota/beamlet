@@ -3,7 +3,7 @@
 <img src="web/icon-192.png" alt="Beamlet" width="64" height="64" align="left">
 
 **An optical-stream transfer tool that hands encrypted files from one device to another using nothing but a screen and a camera.**  
-Move multiple files (up to 100 MB in total) between two devices right in front of you — no Wi-Fi, mobile data, Bluetooth, cloud, or USB.
+Move multiple files (about five minutes' worth: some 3.5 MB from a phone, 10 MB from a PC) between two devices right in front of you — no Wi-Fi, mobile data, Bluetooth, cloud, or USB.
 
 <br clear="left">
 

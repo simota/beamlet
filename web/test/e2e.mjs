@@ -6,7 +6,7 @@
 
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
-import { measure, receiverCaps } from '../beamlet.js';
+import { MODES, SEND_SECONDS, measure, modeRate, receiverCaps, sendLimit } from '../beamlet.js';
 
 const bytes = await readFile(new URL('../pkg/beamlet.wasm', import.meta.url));
 const { instance } = await WebAssembly.instantiate(bytes, {});
@@ -225,4 +225,16 @@ start(files, w.tx_mode(0), key.fingerprint);
   }
   assert.ok(status.complete, 'the fast transfer completes');
   console.log('ok: measured caps take fast mode, read as 3-bit frames');
+}
+
+// Send limit (send.js): what each mode carries in SEND_SECONDS at §11's
+// 20% tile loss, never more than the receiver's 64 MiB.
+{
+  const limit = Object.fromEntries(MODES.map((m) => [m.name, sendLimit(m)]));
+  assert.equal(limit.compact, Math.floor(1026 * 15 * 0.8 * SEND_SECONDS));
+  assert.equal(limit.standard, Math.floor(2832 * 15 * 0.8 * SEND_SECONDS));
+  assert.ok(limit.stable < limit.compact && limit.compact < limit.standard && limit.standard < limit.fast);
+  assert.equal(limit.fastest, 64 * 1024 * 1024, 'no mode sends more than the receiver takes');
+  assert.ok(limit.fast / modeRate(MODES.find((m) => m.name === 'fast')) <= SEND_SECONDS);
+  console.log(`ok: send limits ${MODES.map((m) => `${m.name} ${(limit[m.name] / 1048576).toFixed(1)} MB`).join(', ')}`);
 }
